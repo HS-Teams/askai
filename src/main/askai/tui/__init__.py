@@ -1,6 +1,6 @@
 # _*_ coding: utf-8 _*_
 #
-# hspylib-askai v1.2.15
+# hspylib-askai v1.2.17
 #
 # Package: main.askai.tui
 """Package initialization."""
@@ -12,4 +12,4 @@ __all__ = [
     'app_widgets', 
     'askai_app'
 ]
-__version__ = '1.2.15'
+__version__ = '1.2.17'

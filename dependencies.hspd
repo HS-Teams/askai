@@ -21,22 +21,22 @@ package: pyperclip, version: 1.11.0, mode: ge
 package: python-magic, version: 0.4.27, mode: ge
 package: pytz, version: 2025.2, mode: ge
 package: transitions, version: 0.9.3, mode: ge
-package: pydantic, version: 2.12.3, mode: ge
+package: pydantic, version: 2.12.4, mode: ge
 package: cryptography, version: 46.0.3, mode: ge
 
 /* LangChain */
-package: langchain, version: 1.0.2, mode: eq
-package: langchain-openai, version: 1.0.1, mode: eq
-package: langchain-community, version: 0.4.0, mode: eq
-package: langchain-google-community, version: 3.0.0, mode: eq
+package: langchain, version: 1.1.0, mode: eq
+package: langchain-openai, version: 1.1.0, mode: eq
+package: langchain-community, version: 0.4.1, mode: eq
+package: langchain-google-community, version: 3.0.1, mode: eq
 package: langchain_classic, version: 1.0.0, mode: eq
 
 /* OpenAI */
 package: openai-whisper, version: 20250625, mode: eq
-package: openai, version: 2.6.0, mode: eq
+package: openai, version: 2.8.1, mode: eq
 
 /* Search Engines */
-package: google-api-python-client, version: 2.185.0, mode: eq
+package: google-api-python-client, version: 2.187.0, mode: eq
 package: google-search-results, version: 2.4.2, mode: eq
 
 /* Web */
@@ -48,12 +48,12 @@ package: html2text, version: 2025.4.15, mode: compat
 
 /* CLI/TUI */
 package: rich, version: 14.2.0, mode: ge
-package: textual, version: 6.3.0, mode: ge
+package: textual, version: 6.6.0, mode: ge
 
 /* Audio */
 package: soundfile, version: 0.13.1, mode: eq
 package: PyAudio, version: 0.2.14, mode: eq
-package: SpeechRecognition, version: 3.14.3, mode: eq
+package: SpeechRecognition, version: 3.14.4, mode: eq
 
 /* Video */
 package: opencv-python, version: 4.12.0.88, mode: eq
@@ -76,9 +76,9 @@ package: tiktoken, version: 0.11.0, mode: compat
 package: nltk, version: 3.9.1, mode: compat
 
 /* Vector Store and Databases */
-package: faiss-cpu, version: 1.12.0, mode: compat
-package: chromadb, version: 1.2.1, mode: compat
+package: faiss-cpu, version: 1.13.0, mode: compat
+package: chromadb, version: 1.3.5, mode: compat
 
 /* Translations */
-package: deepl, version: 1.23.0, mode: eq
+package: deepl, version: 1.25.0, mode: eq
 package: argostranslate, version: 1.10.0, mode: eq
