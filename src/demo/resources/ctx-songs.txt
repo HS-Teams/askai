@@ -1,7 +1,0 @@
-Analysing the provided data
-
-Conclusion: The AC/DC songs in the 'Music' directory at /Users/Music are:
-
-1 war-machine.m4a, modified at Wed Feb 21, 17:06:54 / 2024
-2 highway-to-hell.m4a, modified at Wed May 15, 19:13:26 / 2024
-3 thunderstruck.m4a, modified at Mon Apr 22, 13:53:30 / 2024

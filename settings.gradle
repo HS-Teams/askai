@@ -1,1 +1,5 @@
+pluginManagement {
+  includeBuild(providers.gradleProperty('pyGradleDir').getOrElse('../py-gradle'))
+}
+
 rootProject.name = 'AskAI'
