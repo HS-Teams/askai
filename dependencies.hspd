@@ -41,8 +41,8 @@ package: google-search-results, version: 2.4.2, mode: eq
 
 /* Web */
 package: fake_useragent, version: 2.2.0, mode: compat
-package: requests, version: 2.32.5, mode: compat
-package: urllib3, version: 2.5.0, mode: compat
+package: requests, version: 2.34.2, mode: compat
+package: urllib3, version: 2.8.0, mode: compat
 package: aiohttp, version: 3.13.1, mode: compat
 package: html2text, version: 2025.4.15, mode: compat
 
@@ -75,6 +75,7 @@ package: unstructured[md], version: 0.18.21, mode: compat
 package: tiktoken, version: 0.12.0, mode: compat
 package: nltk, version: 3.9.2, mode: compat
 package: tokenizers, version: 0.22.1, mode: compat
+package: tensorflow, version: 2.21.0, mode: compat
 
 /* Vector Store and Databases */
 package: faiss-cpu, version: 1.13.0, mode: compat
