@@ -8,7 +8,6 @@
 __all__ = [
     'cache_service', 
     'geo_location', 
-    'image_store', 
     'internet_service', 
     'multimedia', 
     'rag_provider', 
