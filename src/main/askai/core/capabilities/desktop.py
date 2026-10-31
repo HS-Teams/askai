@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import subprocess
 import sys
-from uuid import uuid4
 from askai.core.capabilities.media_player import MediaPlayer
 
 
@@ -121,31 +120,4 @@ class DesktopCapabilities:
             result.status,
             result.target,
             {"note": "Preview requested. No image has been captured by AskAI."},
-        )
-
-    def capture_camera(self, device: int = 0) -> ActionResult:
-        self._macos()
-        if device < 0:
-            raise ValueError("Camera device must be non-negative")
-        folder = self.storage / "photos"
-        folder.mkdir(parents=True, exist_ok=True)
-        target = folder / f"{uuid4().hex}.jpg"
-        try:
-            self._run(
-                [
-                    sys.executable,
-                    "-m",
-                    "askai.core.capabilities.camera_worker",
-                    str(device),
-                    str(target),
-                ],
-                timeout=20,
-            )
-            if not target.is_file() or target.stat().st_size == 0:
-                raise RuntimeError("Camera did not produce an image")
-        except BaseException:
-            target.unlink(missing_ok=True)
-            raise
-        return ActionResult(
-            "capture_camera", "completed", str(target), {"bytes": target.stat().st_size}
         )

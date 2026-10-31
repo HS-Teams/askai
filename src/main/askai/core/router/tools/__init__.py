@@ -13,6 +13,5 @@ __all__ = [
     'summarization', 
     'terminal', 
     'vision', 
-    'webcam'
 ]
 __version__ = '1.2.19'

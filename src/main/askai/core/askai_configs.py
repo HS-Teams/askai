@@ -226,24 +226,13 @@ class AskAiConfigs(metaclass=Singleton):
         return settings.get_int("askai.max.agent.execution.time.seconds")
 
     @property
-    def face_detect_alg(self) -> str:
-        return settings.get("askai.camera.face-detect.alg")
+    def identity_similarity_threshold(self) -> float:
+        from askai.core.component.faces.models import DEFAULT_THRESHOLD
+        return settings.get_float("askai.camera.identity.sface.cosine.threshold", DEFAULT_THRESHOLD)
 
     @property
-    def scale_factor(self) -> float:
-        return settings.get_float("askai.camera.scale.factor")
-
-    @property
-    def min_neighbors(self) -> int:
-        return settings.get_int("askai.camera.min.neighbors")
-
-    @property
-    def min_max_size(self) -> tuple[int, ...]:
-        return tuple(map(int, settings.get_list("askai.camera.min-max.size")))
-
-    @property
-    def max_id_distance(self) -> float:
-        return settings.get_float("askai.camera.identity.max.distance")
+    def identity_caption_enabled(self) -> bool:
+        return settings.get_bool("askai.camera.identity.caption.enabled", False)
 
     @property
     def recorder_phrase_limit_millis(self) -> int:

@@ -6,6 +6,7 @@ import sys
 from jsonschema import ValidationError
 from askai.core.agents.elicitation import (
     ELICITATION_METHOD,
+    INPUT_FORM_METHOD,
     FORM_MODES,
     decode_form,
     field_label,
@@ -63,8 +64,8 @@ class AgentInteraction:
             "Agent interaction method=%s item=%s", method, params.get("itemId")
         )
         params = translate_request(params, self._translate)
-        if method == ELICITATION_METHOD:
-            return self._elicit(params)
+        if method in {ELICITATION_METHOD, INPUT_FORM_METHOD}:
+            return self._elicit(params, confirm=method == ELICITATION_METHOD)
         if method == "item/tool/requestUserInput":
             answers = {}
             for question in params.get("questions", []):
@@ -91,7 +92,7 @@ class AgentInteraction:
             return {"decision": "accept"}
         return deny_decision(params)
 
-    def _elicit(self, params):
+    def _elicit(self, params, *, confirm=True):
         mode = params.get("mode", "form")
         message = f"{params.get('serverName') or self._translate('Tool')}: {params.get('message', '')}"
         if mode == "url":
@@ -109,8 +110,10 @@ class AgentInteraction:
                 )
             )
             return {"action": "cancel"}
-        if not self._confirm(message):
+        if confirm and not self._confirm(message):
             return {"action": "decline"}
+        if not confirm:
+            self._show(message)
         schema = params["requestedSchema"]
         while True:
             values = {}

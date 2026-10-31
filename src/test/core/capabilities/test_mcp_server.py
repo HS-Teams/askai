@@ -26,7 +26,6 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
                         "play_music",
                         "control_music",
                         "open_camera",
-                        "capture_camera",
                     },
                 )
                 result = await session.call_tool(

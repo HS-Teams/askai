@@ -56,6 +56,17 @@ class AskAiSettings(metaclass=Singleton):
         self._settings = Settings(self._configs)
         if not self._settings.count() or self.get("askai.settings.version.id") != self.__ACTUAL_VERSION:
             self.defaults()
+        from askai.core.component.faces.models import DEFAULT_THRESHOLD
+        for key, value in {
+            "askai.camera.identity.sface.cosine.threshold": DEFAULT_THRESHOLD,
+            "askai.camera.identity.caption.enabled": False,
+        }.items():
+            if self.get(key, None) is None:
+                self.put(key, value)
+        from askai.core.permissions.grants import GRANTS, PREFIX
+        for name in GRANTS:
+            if self.get(PREFIX + name, None) is None:
+                self.put(PREFIX + name, "ask")
         if self.get("askai.session.compact.on.exit", None) is None:
             self.put("askai.session.compact.on.exit", True)
 
@@ -69,6 +80,9 @@ class AskAiSettings(metaclass=Singleton):
         return self._settings.get(name)
 
     def __setitem__(self, name: str, item: Any) -> None:
+        if name.startswith("askai.grants."):
+            from askai.core.permissions.grants import validate_setting
+            item = validate_setting(name, item)
         self._settings.put(name, name[: name.find(".")], item)
 
     @property
@@ -100,9 +114,9 @@ class AskAiSettings(metaclass=Singleton):
         self._settings.put("askai.settings.version.id", "askai", self.__ACTUAL_VERSION)
         self._settings.put("askai.debug.enabled", "askai", False)
         self._settings.put("askai.speak.enabled", "askai", False)
-        self._settings.put("askai.cache.enabled", "askai", False)
+        self._settings.put("askai.cache.enabled", "askai", True)
         self._settings.put("askai.cache.ttl.minutes", "askai", 25)
-        self._settings.put("askai.context.keep.conversation", "askai", False)
+        self._settings.put("askai.context.keep.conversation", "askai", True)
         self._settings.put("askai.session.compact.on.exit", "askai", True)
         self._settings.put("askai.preferred.language", "askai", "")
         self._settings.put("askai.router.mode.default", "askai", "taius")
@@ -134,16 +148,17 @@ class AskAiSettings(metaclass=Singleton):
         self._settings.put("askai.recorder.noise.detection.duration.millis", "askai", 600)
         self._settings.put("askai.recorder.input.device.auto.swap", "askai", True)
         # Camera
-        self._settings.put("askai.camera.face-detect.alg", "askai", "haarcascade_frontalface_default.xml")
-        self._settings.put("askai.camera.scale.factor", "askai", 1.1)
-        self._settings.put("askai.camera.min.neighbors", "askai", 3)
-        self._settings.put("askai.camera.min-max.size", "askai", "100, 100")
-        self._settings.put("askai.camera.identity.max.distance", "askai", 0.70)
+        from askai.core.component.faces.models import DEFAULT_THRESHOLD
+        self._settings.put("askai.camera.identity.sface.cosine.threshold", "askai", DEFAULT_THRESHOLD)
+        self._settings.put("askai.camera.identity.caption.enabled", "askai", False)
         # OpenAI
         self._settings.put("askai.openai.speech.to.text.model", "askai", "whisper-1")
         self._settings.put("askai.openai.text.to.speech.model", "askai", "tts-1")
         self._settings.put("askai.openai.text.to.speech.voice", "askai", "onyx")
         self._settings.put("askai.openai.text.to.speech.audio.format", "askai", "mp3")
+        from askai.core.permissions.grants import GRANTS, PREFIX
+        for name in GRANTS:
+            self._settings.put(PREFIX + name, "askai", "ask")
         log.debug(f"Settings database created !")
 
     def get(self, key: str, default_value: str | None = "") -> str:

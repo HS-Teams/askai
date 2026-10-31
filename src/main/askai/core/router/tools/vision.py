@@ -1,7 +1,6 @@
 from askai.core.askai_events import events
 from askai.core.askai_messages import msg
-from askai.core.component.cache_service import PICTURE_DIR, SCREENSHOTS_DIR
-from askai.core.component.multimedia.audio_player import player
+from askai.core.component.cache_service import PICTURE_DIR
 from askai.core.engine.ai_vision import AIVision
 from askai.core.model.ai_reply import AIReply
 from askai.core.model.image_result import ImageResult
@@ -11,9 +10,6 @@ from askai.core.support.shared_instances import shared
 from hspylib.core.config.path_object import PathObject
 from hspylib.core.enums.enumeration import Enumeration
 from hspylib.core.metaclass.classpath import AnyPath
-from hspylib.core.preconditions import check_argument
-from hspylib.core.tools.text_tools import ensure_endswith
-from hspylib.core.zoned_datetime import now
 from PIL import Image
 from string import Template
 from textwrap import indent
@@ -21,8 +17,7 @@ from transformers import BlipForConditionalGeneration, BlipProcessor
 from typing import Literal
 
 import os
-import pause
-import pyautogui
+import json
 import torch
 
 SCREENSHOT_TEMPLATE: Template = Template(
@@ -83,7 +78,7 @@ def offline_captioner(path_name: AnyPath) -> str:
         caption = processor.decode(outputs[0], skip_special_tokens=True)
         caption = caption.title() if caption else "I could not caption the image"
 
-    return '{"env_description": "' + caption + '"}'
+    return json.dumps({"env_description": caption})
 
 
 def image_captioner(
@@ -191,26 +186,12 @@ def capture_screenshot(
     :return: The path to the saved screenshot.
     """
 
-    file_path: str = ensure_endswith(path_name or f"ASKAI-SCREENSHOT-{now('%Y%m%d%H%M')}", ".jpeg")
-    posix_path: PathObject = PathObject.of(file_path)
-    check_argument(os.path.exists(posix_path.abs_dir))
-    i = 3
+    from askai.core.processors.taius import taius
+    import json
 
-    events.reply.emit(reply=AIReply.mute(msg.t(f"Screenshot in: {i}")))
-    while (i := (i - 1)) >= 0:
-        player.play_sfx("click")
-        pause.seconds(1)
-        events.reply.emit(reply=AIReply.mute(msg.t(f"Screenshot in: {i}")), erase_last=True)
-    player.play_sfx("camera-shutter")
-    events.reply.emit(reply=AIReply.mute(msg.click()), erase_last=True)
-
-    screenshot = pyautogui.screenshot()
-    _, ext = os.path.splitext(posix_path.filename)
-    if ext.casefold().endswith((".jpg", ".jpeg")):
-        screenshot = screenshot.convert("RGB")
-    final_path: str = os.path.join(save_dir or SCREENSHOTS_DIR, posix_path.filename)
-    screenshot.save(final_path)
-    events.reply.emit(reply=AIReply.full(msg.screenshot_saved(final_path)))
-    desktop_caption = parse_screenshot_caption(image_captioner(final_path, save_dir, query, "screenshot"))
-
-    return SCREENSHOT_TEMPLATE.substitute(image_path=final_path, image_caption=os.linesep.join(desktop_caption))
+    request = "Capture the screen using the AskAI capture_screenshot tool and analyze the saved image."
+    if path_name or save_dir:
+        request += " Requested output location: " + json.dumps({"filename": str(path_name or ""), "directory": str(save_dir or "")})
+    if query:
+        request += " User question about the screenshot: " + json.dumps(query)
+    return taius.process(request)

@@ -58,7 +58,6 @@ package: pyautogui, version: 0.9.54, mode: eq
 /* Pre-Trained and AI */
 package: torch, version: 2.8.0, mode: compat
 package: torchvision, version: 0.23.0, mode: compat
-package: open-clip-torch, version 3.1.0, mode: compat
 package: opentelemetry-api, version: 1.36.0, mode: compat
 package: opentelemetry-sdk, version: 1.36.0, mode: compat
 package: opentelemetry-proto, version: 1.36.0, mode: compat
@@ -78,6 +77,7 @@ package: faiss-cpu, version: 1.13.0, mode: compat
 package: chromadb, version: 1.3.5, mode: compat
 
 /* Translations */
+package: lingua-language-detector, version: 2.1.1, mode: eq
 package: deepl, version: 1.25.0, mode: eq
 package: argostranslate, version: 1.10.0, mode: eq
 

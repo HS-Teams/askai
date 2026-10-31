@@ -25,6 +25,13 @@ class AgentProgress:
         self._active = False
 
     def emit(self, event):
+        if event.kind in {"camera_started", "screenshot_started"}:
+            self._status.stop()
+            return
+        if event.kind in {"camera_finished", "screenshot_finished"}:
+            if self._active:
+                self._status.start()
+            return
         if event.kind == "finished":
             self._status.stop()
             self._active = False
@@ -34,7 +41,7 @@ class AgentProgress:
             label = self._STAGES.get(event.data.get("stage"))
             if event.data.get("stage") == "compaction":
                 from askai.core.askai_messages import msg
-                label = msg.t("Compacting session…")
+                label = msg.translate("Compactando histórico…")
         elif event.kind == "progress":
             label = self._ACTIVITIES.get(event.data.get("type"), "Processando solicitação…")
         elif event.kind == "tool_progress":

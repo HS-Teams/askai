@@ -32,7 +32,14 @@ class ProgressTests(unittest.TestCase):
         self.interaction.assert_called_once_with('approval', {})
 
     def test_compaction_uses_translated_progress(self):
-        with patch('askai.core.askai_messages.msg.t', return_value='Compacting translated') as translate:
+        with patch('askai.core.askai_messages.msg.translate', return_value='Compacting translated') as translate:
             self.progress.emit(AgentEvent('stage', 's', data={'stage': 'compaction'}))
-        translate.assert_called_once_with('Compacting session…')
+        translate.assert_called_once_with('Compactando histórico…')
         self.status.update.assert_called_with('Compacting translated')
+
+    def test_camera_leaves_terminal_free_for_original_countdown(self):
+        self.progress.emit(AgentEvent('stage', 's', data={'stage': 'execution'}))
+        self.progress.emit(AgentEvent('camera_started', 's'))
+        self.status.stop.assert_called_once()
+        self.progress.emit(AgentEvent('camera_finished', 's'))
+        self.assertEqual(self.status.start.call_count, 2)

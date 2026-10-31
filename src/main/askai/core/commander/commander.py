@@ -17,7 +17,6 @@ from pathlib import Path
 from string import Template
 from textwrap import dedent
 import os
-import re
 
 from askai.cli.help_formatter import HelpGroup, render_help
 from click import Command
@@ -235,7 +234,7 @@ def history(operation: str, value: str | None = None) -> None:
     """List session conversations, configure resume, or forget keyboard input.
 
     /history list [YYYY-MM-DD] lists all dates when omitted.
-    /history enable <0|1> saves whether to resume a session after restarting.
+    /history enable <0|1> controls saving conversations and resuming sessions.
     /history forget clears keyboard input only; /session reset starts a new session.
     """
     match operation:
@@ -309,10 +308,31 @@ def settings(operation: str, name: str, value: str) -> None:
 
 
 @ask_commander.command()
+@click.argument("operation", type=click.Choice(["list", "get", "set", "reset"]), default="list")
+@click.argument("name", default="")
+@click.argument("value", type=click.Choice(["ask", "allow", "deny", ""]), default="")
+def grants(operation: str, name: str, value: str) -> None:
+    """Manage persistent permissions using AskAI settings.
+
+    /grants list [prefix]
+    /grants get camera.capture.local
+    /grants set media.play.local allow
+    /grants reset [name]: restore ask for one or all grants.
+    Full askai.grants.* names are also accepted. No wildcard grants.
+    """
+    from askai.core.commander.commands.grants_cmd import GrantsCmd
+    try:
+        GrantsCmd.run(operation, name, value)
+    except ValueError as error:
+        raise click.BadParameter(str(error)) from error
+
+
+@ask_commander.command()
 @click.argument("operation", default="list")
 @click.argument("args", nargs=-1)
 def cache(operation: str, args: tuple[str, ...]) -> None:
-    """Manages AskAI TTL-cache management and associated files.
+    """Manage response, audio and translation caches. /cache enable <0|1> controls all three.
+    TTL applies to the response cache only.
     :param operation: Specifies the cache operation. Options: [list|get|clear|files|enable|ttl]
     :param args: Arguments relevant to the chosen operation.
     """
@@ -455,11 +475,18 @@ def translate(from_locale_str: AnyLocale, texts: tuple[str, ...]) -> None:
 
 
 @ask_commander.command()
-@click.argument("operation", default="capture")
+@click.argument("operation", default="capture", type=click.Choice(["capture", "photo", "identify", "id", "register", "review"], case_sensitive=False))
 @click.argument("args", nargs=-1)
 def camera(operation: str, args: list) -> None:
-    """Take photos, import images, or identify a person using the WebCam.
-    :param operation: The camera operation to perform. Options: [capture|identify|import]
+    """Take photos, identify or register local identities.
+
+    /camera register: capture a photo and ask for names in a numbered preview.
+    /camera register "/absolute/photo.jpg" [...]: enroll faces from existing photos.
+    /camera review: group stored faces with Merge, Skip or Replace.
+    New creates an identity; Merge adds samples; Replace replaces its samples.
+    Blank action skips a face; cancelling discards all pending changes.
+
+    :param operation: The camera operation to perform. Options: [capture|identify|register|review]
     :param args: The arguments required for the operation.
     """
     match operation.casefold():
@@ -467,8 +494,10 @@ def camera(operation: str, args: list) -> None:
             CameraCmd.capture(*args)
         case "identify" | "id":
             CameraCmd.identify(*args)
-        case "import":
-            CameraCmd.import_images(*args)
+        case "register":
+            CameraCmd.register(*args)
+        case "review":
+            CameraCmd.review()
         case _:
             err = str(click.BadParameter(f"Invalid camera operation: '{operation}'"))
             text_formatter.commander_print(f"%RED%{err}%NC%")

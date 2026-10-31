@@ -5,6 +5,7 @@ from askai.cli.interaction_text import translate_request
 from jsonschema import ValidationError
 from askai.core.agents.elicitation import (
     ELICITATION_METHOD,
+    INPUT_FORM_METHOD,
     FORM_MODES,
     field_label,
     decode_form,
@@ -25,7 +26,7 @@ class AgentInteraction(ModalScreen[dict]):
 
     def compose(self) -> ComposeResult:
         with VerticalScroll():
-            if self.method == ELICITATION_METHOD:
+            if self.method in {ELICITATION_METHOD, INPUT_FORM_METHOD}:
                 yield Static(
                     f"{self.params.get('serverName') or self._translate('Tool')}: {self.params.get('message', '')}",
                     markup=False,
@@ -51,7 +52,7 @@ class AgentInteraction(ModalScreen[dict]):
                         )
                     yield Static("", id="form-error", markup=False)
                     yield Button(
-                        self._translate("Confirm and send"),
+                        self._translate("Send answers" if self.method == INPUT_FORM_METHOD else "Confirm and send"),
                         id="elicit-send",
                         variant="primary",
                     )
@@ -134,7 +135,7 @@ class AgentInteraction(ModalScreen[dict]):
             self.action_deny()
 
     def action_deny(self):
-        if self.method == ELICITATION_METHOD:
+        if self.method in {ELICITATION_METHOD, INPUT_FORM_METHOD}:
             self.dismiss({"action": "cancel"})
         elif self.method == "item/tool/requestUserInput":
             self.dismiss({"answers": {}})

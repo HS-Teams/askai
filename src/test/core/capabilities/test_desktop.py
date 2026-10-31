@@ -1,10 +1,8 @@
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from askai.core.capabilities.desktop import DesktopCapabilities
-from askai.core.capabilities.camera_worker import capture
 
 
 class DesktopTests(unittest.TestCase):
@@ -61,24 +59,6 @@ class DesktopTests(unittest.TestCase):
             other.touch()
             with self.assertRaises(ValueError):
                 self.desktop.play_music(str(other))
-
-    def test_camera_is_released_on_read_failure(self):
-        cv2 = Mock()
-        cv2.VideoCapture.return_value.read.return_value = (False, None)
-        with patch.dict(sys.modules, {"cv2": cv2}), self.assertRaises(RuntimeError):
-            capture(0, self.base / "photo.jpg")
-        cv2.VideoCapture.return_value.release.assert_called_once()
-
-    def test_camera_timeout_cleans_partial_file(self):
-        def fail(arguments, timeout):
-            Path(arguments[-1]).write_bytes(b"partial")
-            raise RuntimeError("timeout")
-
-        with patch.object(self.desktop, "_run", side_effect=fail), self.assertRaises(
-            RuntimeError
-        ):
-            self.desktop.capture_camera()
-        self.assertEqual(list((self.base / "photos").iterdir()), [])
 
     def test_camera_preview_does_not_capture(self):
         with patch.object(self.desktop, "open_application") as open_app:

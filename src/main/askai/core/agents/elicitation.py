@@ -4,6 +4,7 @@ import json
 from jsonschema import validate
 
 ELICITATION_METHOD = "mcpServer/elicitation/request"
+INPUT_FORM_METHOD = "askai/input/request"
 FORM_MODES = {"form", "openai/form", "openaiForm"}
 
 
@@ -13,8 +14,10 @@ def field_label(name, schema, translate=lambda text: text):
         label += " — " + translate(description)
     choices = schema.get("enum") or schema.get("oneOf") or schema.get("anyOf")
     if choices:
-        label += (
-            "\n" + translate("Options:") + " " + json.dumps(choices, ensure_ascii=False)
+        labels = [translate(choice.get("title", str(choice.get("const", ""))))
+                  if isinstance(choice, dict) else str(choice) for choice in choices]
+        label += "\n" + translate("Options:") + "  " + "    ".join(
+            f"({index}) {title}" for index, title in enumerate(labels, 1)
         )
     if schema.get("type") in ("object", "array"):
         label += " (JSON)"
@@ -27,6 +30,11 @@ def decode_form(schema, values):
         value = values.get(name, "")
         if value == "" and name not in schema.get("required", []):
             continue
+        choices = field.get("enum") or field.get("oneOf") or field.get("anyOf")
+        if choices:
+            constants = [choice.get("const") if isinstance(choice, dict) else choice for choice in choices]
+            if value not in constants and value.isdecimal() and 1 <= int(value) <= len(constants):
+                value = constants[int(value) - 1]
         kind = field.get("type", "string")
         if kind == "boolean":
             normalized = value.strip().casefold().rstrip(".!?")

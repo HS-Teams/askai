@@ -1,7 +1,5 @@
 from abc import ABC
 from askai.core.askai_configs import configs
-from askai.core.support.text_formatter import text_formatter
-from askai.core.support.utilities import display_text
 from hspylib.core.metaclass.classpath import AnyPath
 
 
@@ -27,22 +25,43 @@ class CameraCmd(ABC):
         events.reply.emit(reply=AIReply.full(taius.process(request)))
 
     @staticmethod
-    def identify(max_distance: int = configs.max_id_distance) -> None:
-        """Identify the person in front of the webcam.
-        :param max_distance: The maximum allowable distance for face recognition. A lower value means closer matching
-                             to the real face (default is configs.max_id_distance).
-        """
-        from askai.core.router.tools.webcam import webcam_identifier
+    def identify(threshold: float = configs.identity_similarity_threshold) -> None:
+        """Recognize registered faces locally using the SFace cosine threshold."""
+        from askai.core.processors.taius import taius
+        from askai.core.askai_events import events
+        from askai.core.model.ai_reply import AIReply
+        import json
 
-        display_text(webcam_identifier(max_distance))
+        request = (
+            "Use identify_camera to recognize registered faces locally. Only summarize its results; "
+            "do not inspect photos or infer identity. Cosine threshold: " + json.dumps(float(threshold))
+        )
+        events.reply.emit(reply=AIReply.full(taius.process(request)))
 
     @staticmethod
-    def import_images(pathname: AnyPath = None, detect_faces: bool = True) -> None:
-        """Import image files into the image collection.
-        :param pathname: The pathname or glob pattern specifying the images to be imported (optional).
-        :param detect_faces: Whether to detect faces in the imported images (default is True).
-        """
-        from askai.core.component.multimedia.camera import camera
+    def register(*photos: str) -> None:
+        """Enroll locally, asking the user to name detected faces in a preview."""
+        from askai.core.processors.taius import taius
+        from askai.core.askai_events import events
+        from askai.core.model.ai_reply import AIReply
+        import json
 
-        imports: tuple[int, ...] = camera.import_images(str(pathname), detect_faces)
-        text_formatter.commander_print(f"`Imports:` {imports[0]}  `Faces:` {imports[1]}")
+        request = (
+            "Use register_identities to register faces locally. AskAI must open the labelled "
+            "preview and collect names directly from the human. Only summarize the result. "
+        )
+        request += ("Photos: " + json.dumps(list(photos))) if photos else "Use the camera."
+        events.reply.emit(reply=AIReply.full(taius.process(request)))
+
+
+    @staticmethod
+    def review() -> None:
+        """Review existing numbered face samples through the host input component."""
+        from askai.core.processors.taius import taius
+        from askai.core.askai_events import events
+        from askai.core.model.ai_reply import AIReply
+
+        events.reply.emit(reply=AIReply.full(taius.process(
+            "Use register_identities with review=true to manage existing face identities. "
+            "AskAI must collect all grouping choices directly from the human. Only summarize the result."
+        )))

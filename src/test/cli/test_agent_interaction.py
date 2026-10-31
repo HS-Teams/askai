@@ -58,3 +58,14 @@ class InteractionTests(unittest.TestCase):
         )
         read.assert_not_called()
         secret.assert_called_once()
+
+    def test_local_input_form_does_not_ask_permission_before_names(self):
+        from askai.core.agents.elicitation import INPUT_FORM_METHOD
+        confirm = Mock(side_effect=AssertionError('No confirmation before data entry'))
+        response = AgentInteraction(Mock(return_value='Hugo'), self.show, confirm=confirm)(
+            INPUT_FORM_METHOD, {'mode': 'form', 'message': 'Name this face', 'requestedSchema': {
+                'type': 'object', 'properties': {'name': {'type': 'string'}},
+            }},
+        )
+        self.assertEqual(response, {'action': 'accept', 'content': {'name': 'Hugo'}})
+        confirm.assert_not_called()

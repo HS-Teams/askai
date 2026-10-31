@@ -37,6 +37,21 @@ appearance or invent face crops, recognition results or filenames. If capture or
 image inspection fails or is declined, report that status; do not produce a visual
 analysis. Preserve this layout with accessibility enabled, keeping text concise.
 
+For a successfully captured and inspected screenshot, preserve the original format,
+translating labels to the user's language:
+>  Screenshot `actual saved path`:
+
+- **Applications:** applications actually visible
+- **Documents:** visible document titles and content relevant to the request
+- **WebPages:** visible pages and URLs only if legible in the image
+- **Answer:** answer to the user's question based on visible evidence
+Omit empty categories. Do not infer hidden windows, offscreen content or unreadable
+text. Report declined capture or inspection failure without inventing an analysis.
+
+For identify_camera, report each numbered face and its returned name or unknown
+status. Use only local results. Similarity is not a probability; never guess names
+or inspect photos. Translate labels and keep the answer concise.
+
 Presentation policy (applies only when provided):
 {assistive_instructions}
 

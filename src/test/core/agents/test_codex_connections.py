@@ -50,3 +50,13 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaises(AgentError):
             connections.prepare()
         transport.__exit__.assert_called_once()
+
+    def test_private_review_shares_process_but_revokes_desktop_actions(self):
+        connection = self.transport()
+        connections = CodexConnections('codex', Mock(return_value=connection))
+        self.addCleanup(connections.close)
+        with connections.lease(False, actions_allowed=True):
+            self.assertEqual(connections._scope_file.read_text(), 'allow')
+        self.assertEqual(connections._scope_file.read_text(), 'deny')
+        with connections.lease(False, actions_allowed=False):
+            self.assertEqual(connections._scope_file.read_text(), 'deny')

@@ -4,17 +4,24 @@ from dataclasses import asdict
 from pathlib import Path
 import os
 import asyncio
-from pydantic import BaseModel
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.types import ToolAnnotations
 from askai.core.capabilities.desktop import DesktopCapabilities
+from askai.core.support.app_paths import askai_data_dir
+from askai.core.permissions.grants import grants
 
 
-class CameraConsent(BaseModel):
-    """An empty form uses the host confirmation buttons, with no extra text field."""
+async def confirm_action(ctx: Context, message: str) -> bool:
+    """Use the MCP form schema; model titles/descriptions are not allowed at its root."""
+    result = await ctx.session.elicit_form(
+        message=message,
+        requestedSchema={"type": "object", "properties": {}},
+        related_request_id=ctx.request_id,
+    )
+    return result.action == "accept"
 
 
-def create_server(capabilities: DesktopCapabilities) -> FastMCP:
+def create_server(capabilities: DesktopCapabilities, policy=grants) -> FastMCP:
     server = FastMCP(
         "AskAI desktop",
         instructions=(
@@ -28,49 +35,54 @@ def create_server(capabilities: DesktopCapabilities) -> FastMCP:
         readOnlyHint=False, destructiveHint=False, openWorldHint=True
     )
 
+    async def authorize(ctx, required, message):
+        return await policy.authorize_async(required, message, lambda text: confirm_action(ctx, text))
+
     @server.tool(annotations=annotations)
-    def open_path(path: str) -> dict:
+    async def open_path(path: str, ctx: Context) -> dict:
         """Open an absolute local path. Audio/video plays in ffplay; other paths use the default app."""
-        return asdict(capabilities.open_path(path))
+        target = DesktopCapabilities._path(path)
+        media = target.suffix.lower() in DesktopCapabilities.AUDIO_SUFFIXES | DesktopCapabilities.VIDEO_SUFFIXES
+        required = ["media.play.local" if media else "paths.open.local"]
+        if target.name.casefold() == "photo booth.app":
+            required.append("camera.preview.local")
+        if not await authorize(ctx, required, f"Allow AskAI to open `{target}`?"):
+            return {"status": "cancelled", "operation": "open_path"}
+        return await asyncio.to_thread(lambda: asdict(capabilities.open_path(str(target))))
 
     @server.tool(annotations=annotations)
-    def open_application(name: str) -> dict:
+    async def open_application(name: str, ctx: Context) -> dict:
         """Launch a named macOS application, such as Safari or Calculator."""
-        return asdict(capabilities.open_application(name))
+        required = ["applications.open.local"]
+        if Path(name).name.casefold().removesuffix(".app") in {"photo booth", "photobooth"}:
+            required.append("camera.preview.local")
+        if not await authorize(ctx, required, f"Allow AskAI to open application `{name}`?"):
+            return {"status": "cancelled", "operation": "open_application"}
+        return await asyncio.to_thread(lambda: asdict(capabilities.open_application(name)))
 
     @server.tool(annotations=annotations)
-    def play_music(path: str) -> dict:
+    async def play_music(path: str, ctx: Context) -> dict:
         """Play a local audio or video file using ffplay (FFmpeg). Resolve the path before calling."""
-        return asdict(capabilities.play_music(path))
+        target = DesktopCapabilities._path(path)
+        if not await authorize(ctx, ["media.play.local"], f"Allow AskAI to play `{target}`?"):
+            return {"status": "cancelled", "operation": "play_music"}
+        return await asyncio.to_thread(lambda: asdict(capabilities.play_music(str(target))))
 
     @server.tool(annotations=annotations)
-    def control_music(action: str) -> dict:
+    async def control_music(action: str, ctx: Context) -> dict:
         """Control AskAI ffplay playback: play (resume), pause or stop. No playlist navigation."""
-        return asdict(capabilities.control_music(action))
+        if action not in {"play", "pause", "stop"}:
+            raise ValueError("Playback action must be play, pause or stop")
+        if not await authorize(ctx, [f"media.{action}.local"], f"Allow AskAI to {action} local playback?"):
+            return {"status": "cancelled", "operation": "control_music"}
+        return await asyncio.to_thread(lambda: asdict(capabilities.control_music(action)))
 
     @server.tool(annotations=annotations)
     async def open_camera(ctx: Context) -> dict:
         """Open the camera preview in Photo Booth, only when the user requests camera access."""
-        consent = await ctx.elicit("Allow AskAI to open the camera preview?", CameraConsent)
-        if consent.action != "accept":
+        if not await authorize(ctx, ["camera.preview.local"], "Allow AskAI to open the camera preview?"):
             return {"status": "cancelled", "operation": "open_camera"}
         return await asyncio.to_thread(lambda: asdict(capabilities.open_camera()))
-
-    @server.tool(annotations=annotations)
-    async def capture_camera(ctx: Context, device: int = 0) -> dict:
-        """Confirm, count down and capture one photo. Open the returned path with your image-viewing tool before analyzing it."""
-        consent = await ctx.elicit(
-            "Allow AskAI to take one camera photo and share it with the current agent for visual analysis?",
-            CameraConsent,
-        )
-        if consent.action != "accept":
-            return {"status": "cancelled", "operation": "capture_camera"}
-        for remaining in (3, 2, 1):
-            await ctx.report_progress(3 - remaining, 3, f"Camera: {remaining}")
-            await asyncio.sleep(1)
-        result = await asyncio.to_thread(capabilities.capture_camera, device)
-        await ctx.report_progress(3, 3, "Camera: SHOT")
-        return asdict(result)
 
     return server
 
@@ -78,7 +90,7 @@ def create_server(capabilities: DesktopCapabilities) -> FastMCP:
 def main():
     base = Path(
         os.getenv(
-            "ASKAI_CAPABILITY_DIR", str(Path.home() / ".local/share/askai/capabilities")
+            "ASKAI_CAPABILITY_DIR", str(askai_data_dir() / "cache" / "capabilities")
         )
     )
     create_server(DesktopCapabilities(base)).run(transport="stdio")

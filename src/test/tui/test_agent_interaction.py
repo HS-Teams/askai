@@ -54,3 +54,16 @@ class InteractionTests(unittest.IsolatedAsyncioTestCase):
             await pilot.click('#elicit-send')
             await pilot.pause()
             self.assertEqual(app.result, {'action': 'accept', 'content': {'count': 2}})
+
+    async def test_local_input_form_uses_same_typed_input_without_permission_step(self):
+        from askai.core.agents.elicitation import INPUT_FORM_METHOD
+        app = DialogApp(INPUT_FORM_METHOD, {
+            'mode': 'form', 'message': 'Name', 'requestedSchema': {
+                'type': 'object', 'properties': {'name': {'type': 'string'}}}})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            await pilot.click('#field-0')
+            await pilot.press('H', 'u', 'g', 'o')
+            await pilot.click('#elicit-send')
+            await pilot.pause()
+            self.assertEqual(app.result, {'action': 'accept', 'content': {'name': 'Hugo'}})
