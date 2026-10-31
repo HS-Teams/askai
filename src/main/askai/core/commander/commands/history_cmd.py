@@ -92,16 +92,33 @@ class HistoryCmd(ABC):
         return copied_text
 
     @staticmethod
-    def history_list() -> None:
-        """List the input history entries."""
-        if (history := KeyboardInput.history()) and (length := len(history)):
-            history.reverse()
-            display_text(f"### Listing ({length}) Input History:\n\n---\n\n")
-            padding: int = 1 + len(str(length))
-            hist_list: str = ""
-            for i, h in enumerate(history, start=1):
-                hist_list += f'{f"{i}.":<{padding}} **{h}**\n'
-            display_text(hist_list)
+    def history_list(day: str | None = None) -> None:
+        """List durable conversations for this agent and working directory."""
+        from pathlib import Path
+        from askai.core.askai_configs import configs
+        from askai.core.askai_messages import msg
+        from askai.core.askai_settings import ASKAI_DIR
+        from askai.core.support.persistent_memory import PersistentMemory
+
+        history = PersistentMemory(Path(ASKAI_DIR) / "memory" / "history.sqlite3")
+        entries = history.conversations(configs.agent, str(Path.cwd().resolve()), day)
+        if not entries:
+            text_formatter.commander_print(msg.t("No conversation history found."))
+            return
+        groups = {}
+        for entry in entries:
+            groups.setdefault((entry["day"], entry["session"]), []).append(entry)
+        for (session_day, session_id), turns in groups.items():
+            unknown = msg.t("Not recorded")
+            display_text(f"### {session_day or unknown} — {msg.t('Session')}: `{session_id or unknown}`")
+            for turn in turns:
+                display_text(f"**{msg.t('Question')}** ({turn['created']})\n\n{turn['question']}")
+                if turn["answer"] is not None:
+                    display_text(f"**{msg.t('Answer')}**\n\n{turn['answer']}")
+                elif turn["error"] is not None:
+                    display_text(f"**{msg.t('Failed')}**\n\n{turn['error']}")
+                else:
+                    display_text(msg.t("Incomplete request: no final answer recorded."))
 
     @staticmethod
     def history_forget() -> None:

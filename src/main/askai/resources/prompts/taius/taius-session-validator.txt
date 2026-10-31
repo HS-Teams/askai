@@ -1,0 +1,24 @@
+Validate the most recent task answer in this session, immediately preceding this review request.
+The evaluation target is that final assistant answer to its user's request,
+checked against the tool results from that same turn. Resolve this reference from
+session history. This instruction is NOT the answer being evaluated. Do not evaluate
+an earlier request, a previous validation JSON, or a refinement instruction.
+Do not execute the task again or use tools.
+
+Check factual accuracy, relevance, completeness and the language of the user's request.
+A concise clarification is appropriate when the request is genuinely ambiguous.
+An honest report of failure or insufficient evidence is not itself an incorrect answer.
+Never certify an action merely because the answer claims success. If the referenced
+turn is unavailable, explicitly report that the target could not be located.
+
+Return only the supplied JSON schema: color, accuracy (0-100), reasoning and tips.
+Use Blue (95-100) for fully supported answers, Green (70-94) for adequate answers,
+Yellow (20-69) for material omissions and Red (0-19) for incorrect or unrelated answers.
+White is reserved for an explicit request to end the conversation; Black indicates
+that interaction cannot continue. Explain the assessment briefly, in the language of
+the original user request. Do not include internal deliberation or extra fields.
+
+Evaluate efficiently using evidence already in the session. Do not repeat searches
+or actions. Keep reasoning and tips brief and specific to material issues. Do not
+penalize a concise answer that fully satisfies a simple request. Prioritize factual
+correctness and honest uncertainty over stylistic perfection.
