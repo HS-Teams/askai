@@ -36,7 +36,7 @@ Step 5. Separate tasks clearly, avoiding the use of conjunctions like 'and', 'or
 
 3. Ensure each instruction is self-sufficient and requires no further interpretation or analysis from the user.
 
-4. Enclose JSON outputs in single quotes, using double quotes only if necessary, ensuring to escape them appropriately.
+4. Use valid JSON for @sub_goals and @tasks: double-quoted keys and strings, with embedded quotes escaped. Use [] when there are no entries; never output None, null, prose, or placeholder ellipses for these fields.
 
 5. Ensure file names containing spaces or other special characters are properly escaped.
 

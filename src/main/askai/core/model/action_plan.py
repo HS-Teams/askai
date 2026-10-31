@@ -43,7 +43,10 @@ class ActionPlan:
         :param model: The result model.
         :return: An instance of ActionPlan created from the provided inputs.
         """
-        plan: ActionPlan = ActionPlan._parse_response(question, message)
+        try:
+            plan: ActionPlan = ActionPlan._parse_response(question, message)
+        except (ValueError, TypeError) as error:
+            raise InaccurateResponse(f"AI provided an invalid action plan: {error}") from error
         check_state(
             plan is not None and isinstance(plan, ActionPlan), f"Invalid action plan received from LLM: {type(plan)}"
         )

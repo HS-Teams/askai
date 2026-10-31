@@ -79,14 +79,16 @@ def parse_list(field_name: AnyStr, text: AnyStr, is_dict: bool = True) -> list[S
     :return: A list of SimpleNamespace objects or strings.
     """
     flags: int = re.IGNORECASE | re.DOTALL
-    list_pattern: str = field_name + r":\s*(.*?)(?:\n@|$)"
+    list_pattern: str = re.escape(field_name) + r":[ \t]*(.*?)(?:\r?\n[ \t]*@|$)"
     list_matcher: re.Match[str] | None = re.search(list_pattern, text, flags)
     if list_matcher:
-        extracted_list: str = list_matcher.group(1)
+        extracted_list: str = list_matcher.group(1).strip()
         list_value: list[str | dict] = json.loads(ensure_parseable(extracted_list))
-        if list_value:
-            assert isinstance(list_value, list), f"Parse error: Could not parse list: {extracted_list}"
-            if is_dict and all(isinstance(val, dict) for val in list_value):
-                return list(map(lambda t: SimpleNamespace(**t), list_value))
-            return list_value
+        if not isinstance(list_value, list):
+            raise ValueError(f"Expected a list for {field_name}")
+        if is_dict:
+            if not all(isinstance(val, dict) for val in list_value):
+                raise ValueError(f"Expected objects in {field_name}")
+            return [SimpleNamespace(**value) for value in list_value]
+        return list_value
     return list()
