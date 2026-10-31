@@ -26,6 +26,6 @@ class TestRefinerPromptLoading(unittest.TestCase):
             for name in ['askai.core.askai_prompt', 'askai.core.support.utilities']:
                 sys.modules.pop(name, None)
             prompt = importlib.import_module('askai.core.askai_prompt').prompt
-            template = prompt.read_prompt('taius-refiner.txt', prompt.append_path('taius'))
-            self.assertEqual(template, (resources / 'prompts/taius/taius-refiner.txt').read_text())
-            self.assertIn('Output Contract', template)
+            template = prompt.read_prompt('taius-session-refiner.txt', prompt.append_path('taius'))
+            self.assertEqual(template, (resources / 'prompts/taius/taius-session-refiner.txt').read_text())
+            self.assertIn('only the required field "final_answer"', template)

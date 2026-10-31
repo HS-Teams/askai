@@ -12,7 +12,6 @@
 
 Copyright (c) 2024, AskAI
 """
-from askai.core.askai_configs import configs
 from askai.core.askai_messages import msg
 from askai.core.processors.ai_processor import AIProcessor
 from askai.core.processors.chat import chat

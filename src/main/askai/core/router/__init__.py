@@ -7,7 +7,6 @@
 
 __all__ = [
     'evaluation', 
-    'model_selector', 
     'tools'
 ]
 __version__ = '1.2.19'

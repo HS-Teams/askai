@@ -21,7 +21,6 @@ from askai.core.support.shared_instances import shared
 from askai.exception.exceptions import InaccurateResponse
 from textwrap import dedent
 
-import logging as log
 
 # fmt: off
 EVALUATION_GUIDE: str = dedent("""

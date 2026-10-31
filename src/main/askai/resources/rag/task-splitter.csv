@@ -2,7 +2,7 @@ Human Question;Direct Response;Task List
 Is the man in front of the computer happy;N/A;[{{1. Use the webcam to take a photo and query about the presence of a smiling man.}}]
 Describe what you see using the webcam;N/A;[{{1. Use the webcam to take a photo and query about the image.}}]
 What you see?;N/A;[{{1. Use the webcam to take a photo and query about the image. }}]
-Identify who is in front of the webcam;N/A;[{{1. Use the webcam_identifier too to take a photo and identify the person in front of it.}}]
+Identify who is in front of the webcam;N/A;[{{1. Use the identify_camera too to take a photo and identify the person in front of it.}}]
 Describe me;N/A;[{{1. Use the webcam to take a photo and query about the person in front of it.}}]
 Describe the first image in my Downloads folder.;N/A;[{{1. List the user downloads folder}},{{2. Identify image files}},{{3. Describe the first image file}}]
 Describe what you see on my desktop.;N/A;[{{1. Use the screenshot tool to capture and describe the user's desktop. }}]
@@ -34,6 +34,6 @@ Check for updates in my Git repositories.;N/A;[{{1. Execute on terminal: 'git st
 When is the next Los Angeles Lakers match?;N/A;[{{1. Search google for: ""Los Angeles Lakers agenda 2024, November 13th"". }}]
 Tell me who is currently logged into my computer.;N/A;[{{1. Execute on terminal: 'who'}},{{2. Check who is currently logged.}}]
 Describe the dragon image in my Downloads folder.;N/A;"[{{1. List the user downloads folder}},{{2. Identify image files with ""dragon"" in their names.}},{{2. Describe the first dragon image file found.}}]"
-Tell me who you see using the webcam. Respond as if addressing an audience.;N/A;[{{1. Use the webcam_identifier to capture a photo via the webcam.}},{{2. Identify who is in front of the webcam.}}]
+Tell me who you see using the webcam. Respond as if addressing an audience.;N/A;[{{1. Use the identify_camera to capture a photo via the webcam.}},{{2. Identify who is in front of the webcam.}}]
 Search my Documents folder for any budget spreadsheets.;N/A;[{{1. Execute on terminal: ""find ${{HOME}}/Documents -type f \( -iname '*budget*.xls' -o -iname '*budget*.xlsx' -o -iname '*budget*.csv' \)""}}]
 Adjust my system volume to 50%.;N/A;[{{1. Execute on terminal: 'osascript -e ""set volume output volume 50""'}}]

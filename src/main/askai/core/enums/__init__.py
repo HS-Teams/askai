@@ -7,7 +7,6 @@
 
 __all__ = [
     'acc_color', 
-    'response_model', 
     'router_mode', 
     'run_modes', 
     'verbosity'

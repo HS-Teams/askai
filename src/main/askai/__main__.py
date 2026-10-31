@@ -28,7 +28,6 @@ import logging as log
 import os
 import re
 import sys
-import typing
 
 
 class Main(TUIApplication):

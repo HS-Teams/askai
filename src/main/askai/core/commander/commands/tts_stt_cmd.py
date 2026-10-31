@@ -22,7 +22,6 @@ import pause
 
 from askai.core.askai_configs import configs
 from askai.core.askai_settings import settings
-from askai.core.component.multimedia.audio_player import player
 from askai.core.component.multimedia.recorder import InputDevice, recorder
 from askai.core.support.shared_instances import shared
 from askai.core.support.text_formatter import text_formatter

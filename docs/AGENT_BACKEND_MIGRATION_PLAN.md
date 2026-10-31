@@ -283,3 +283,21 @@ Executar testes focados por etapa. Combinar previamente a validação abrangente
 Orquestrador Taius com conversa própria e STM evoluída, componentes RAG/validador/refiner desacoplados, com validação e refinamento após o Codex, contrato de delegação, adaptador Codex por stdio e um objetivo completo em texto: encaminhar toda pergunta, acompanhar execução, encaminhar aprovação, receber evidências e responder. Demonstrar também uma conversa simples passando pelo Codex. Validar esse corte antes de ampliar percepção, ferramentas e provedores.
 
 A migração termina quando o AskAI mantém identidade, memória e coordenação dos objetivos, os especialistas executam tarefas delimitadas por interfaces oficiais, as APIs comerciais diretas previstas foram removidas e voz, histórico e permissões permanecem verificáveis. O roadmap multimodal acrescenta percepção e iniciativa gradual a essa base, mantendo o Taius como o assistente pessoal do usuário.
+
+## Limpeza do código substituído — 2026-10-31
+
+Removidos os modelos `ActionPlan`, `ModelResult`, `ResponseModel`, o seletor antigo,
+os prompts de splitter/seletor e o prompt de refinamento anterior à sessão. Seus
+consumidores de produção já haviam sido substituídos pelo orquestrador e agente.
+Os testes do contrato do refinador passaram a usar `taius-session-refiner.txt`.
+O worker de câmera em subprocesso foi removido: a ferramenta do host usa a classe
+`Camera` original, com confirmação, contagem e sons do AskAI.
+
+Reconhecimento e cadastro facial migraram para YuNet/SFace local, com BLIP opcional.
+O índice OpenCLIP antigo é somente fonte de migração, sem alterar fotos e nomes.
+Mantidos para migração: geração/análise de imagens, ferramentas de análise/sumarização e os adaptadores
+OpenAI/visão que ainda sustentam esses caminhos. Os helpers de busca e o prompt
+`refine-search.txt` permanecem; sua apresentação foi reaproveitada pelo refinador.
+Ollama/Phonon, STT, tradutores, STM, memória persistente, RAG, validador e refinador
+continuam necessários. Ausência de uso pelo Codex não implica remoção de uma
+funcionalidade ainda não portada. Dependências compartilhadas foram preservadas.

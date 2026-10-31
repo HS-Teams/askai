@@ -30,12 +30,11 @@ from hspylib.core.zoned_datetime import now_ms
 from hspylib.modules.application.exit_status import ExitStatus
 from pathlib import Path
 from speech_recognition import AudioData, Microphone, Recognizer, RequestError, UnknownValueError, WaitTimeoutError
-from typing import Callable, Optional, TypeAlias
+from typing import Optional, TypeAlias
 
 import logging as log
 import operator
 import os
-import pause
 import sys
 import threading
 

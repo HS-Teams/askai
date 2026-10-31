@@ -12,8 +12,8 @@ from askai.exception.exceptions import InaccurateResponse
 class TestAnswerRefiner(unittest.TestCase):
     def setUp(self):
         self.model = Mock()
-        self.template = (Path(__file__).parents[3] / 'main/askai/resources/prompts/taius/taius-refiner.txt').read_text()
-        self.arguments = dict(locale="en_US", user="Hjunior", improvements="Be concise", context="", response="Hello!", question="Hi")
+        self.template = (Path(__file__).parents[3] / 'main/askai/resources/prompts/taius/taius-session-refiner.txt').read_text()
+        self.arguments = dict(locale="en_US", user="Hjunior")
 
     def invoke(self, payload):
         self.model.complete.return_value = payload
@@ -24,8 +24,8 @@ class TestAnswerRefiner(unittest.TestCase):
         self.assertEqual(self.model.complete.call_args.kwargs["schema"], RefinedResponse.model_json_schema())
         messages = self.model.complete.call_args.args[0]
         self.assertEqual(messages[0]["role"], "system")
-        self.assertIn('exactly one required field: "final_answer"', messages[0]["content"])
-        self.assertIn('Human Question: "Hi"', messages[0]["content"])
+        self.assertIn('only the required field "final_answer"', messages[0]["content"])
+        self.assertIn('most recent task answer', messages[0]["content"])
 
     def test_assistive_prompt_is_composed_with_persona_and_same_schema(self):
         assistive = (Path(__file__).parents[3] / 'main/askai/resources/prompts/taius/taius-tts.txt').read_text()
@@ -36,14 +36,14 @@ class TestAnswerRefiner(unittest.TestCase):
         self.assertEqual(answer, "Resumo acessível, Hjunior.")
         instructions = self.model.complete.call_args.args[0][0]['content']
         self.assertIn(assistive, instructions)
-        self.assertIn('demeanor of Jarvis', instructions)
+        self.assertIn("Jarvis's composed demeanor", instructions)
         self.assertNotIn('{assistive_instructions}', instructions)
         self.assertEqual(self.model.complete.call_args.kwargs['schema'], RefinedResponse.model_json_schema())
 
     def test_normal_mode_does_not_apply_accessible_list_limit(self):
         self.invoke('{"final_answer":"Hello!"}')
         instructions = self.model.complete.call_args.args[0][0]['content']
-        self.assertIn('demeanor of Jarvis', instructions)
+        self.assertIn("Jarvis's composed demeanor", instructions)
         self.assertNotIn('at most five representative entries', instructions)
 
     def test_preserves_markdown_and_whitespace(self):
@@ -51,7 +51,7 @@ class TestAnswerRefiner(unittest.TestCase):
         self.assertEqual(self.invoke(json.dumps({"final_answer": answer})), answer)
 
     def test_unchanged_answer_obeys_same_contract(self):
-        self.assertEqual(self.invoke('{"final_answer":"Hello!"}'), self.arguments["response"])
+        self.assertEqual(self.invoke('{"final_answer":"Hello!"}'), "Hello!")
 
     def test_rejects_extra_fields_missing_field_and_invalid_values(self):
         for payload in [

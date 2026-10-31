@@ -12,15 +12,11 @@
 
    Copyright (c) 2024, AskAI
 """
-from askai.core.askai_events import events
-from askai.core.askai_messages import msg
 from askai.core.askai_prompt import prompt
 from askai.core.engine.openai.temperature import Temperature
-from askai.core.model.ai_reply import AIReply
 from askai.core.support.shared_instances import shared
 from askai.core.support.text_formatter import TextFormatter
 
-import logging as log
 
 
 def query_output(query: str, context: str = None) -> str:

@@ -13,7 +13,6 @@
    Copyright (c) 2024, AskAI
 """
 from collections import defaultdict
-from typing import List
 import logging as log
 import re
 
@@ -26,12 +25,10 @@ import requests
 from bs4 import BeautifulSoup
 
 from askai.__classpath__ import API_KEYS
-from askai.core.askai_configs import configs
 from askai.core.askai_events import events
 from askai.core.askai_messages import msg
 from askai.core.askai_prompt import prompt
 from askai.core.component.geo_location import geo_location
-from askai.core.engine.openai.temperature import Temperature
 from askai.core.model.ai_reply import AIReply
 from askai.core.model.search_result import SearchResult
 from askai.core.support.shared_instances import shared
