@@ -16,7 +16,7 @@ from askai.__classpath__ import API_KEYS
 from askai.language.ai_translator import AITranslator
 from askai.language.language import Language
 from deepl import Translator
-from functools import lru_cache
+from askai.core.support.cache_policy import optional_cache
 from typing import AnyStr
 
 import deepl
@@ -31,7 +31,7 @@ class DeepLTranslator(AITranslator):
         super().__init__(source_lang, target_lang)
         self._translator: Translator | None = None
 
-    @lru_cache
+    @optional_cache()
     def _translate_text(self, text: AnyStr, **kwargs) -> str:
         """Translate text from the source language to the target language.
         :param text: Text to translate.

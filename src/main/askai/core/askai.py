@@ -79,12 +79,13 @@ class AskAi:
             configs.model = model_name
         self._context: ChatContext = shared.create_context(self._engine.ai_token_limit())
         self._mode: RouterMode = shared.mode
+        self._private_console_dir = None
         self._console_path = Path(f"{CACHE_DIR}/askai-{self.session_id}.md")
         self._query_prompt: str | None = None
         self._abort_count: int = 0
 
-        if not self._console_path.exists():
-            self._console_path.touch()
+        if not self.console_path.exists():
+            self.console_path.touch()
 
     def __str__(self) -> str:
         return shared.app_info
@@ -111,6 +112,13 @@ class AskAi:
 
     @property
     def console_path(self) -> Path:
+        if not configs.is_keep_context:
+            if self._private_console_dir is None:
+                from tempfile import TemporaryDirectory
+                self._private_console_dir = TemporaryDirectory(prefix="askai-session-")
+            path = Path(self._private_console_dir.name) / "console.md"
+            path.touch(exist_ok=True)
+            return path
         return self._console_path
 
     @property
@@ -168,12 +176,14 @@ class AskAi:
                 return True, None
             shared.context.push("HISTORY", question)
             if not getattr(processor, "cacheable", True) or not (output := cache.read_reply(question)):
-                log.debug('Response not found for "%s" in cache. Querying from %s.', question, self.engine.nickname())
+                log.debug('Response not cached. Querying from %s.', self.engine.nickname())
                 events.reply.emit(reply=AIReply.detailed(msg.wait()))
                 if output := processor.process(question, context=read_stdin(), query_prompt=self._query_prompt):
+                    output = msg.translate_response(output, question)
                     events.reply.emit(reply=AIReply.final(output))
             else:
-                log.debug("Reply found for '%s' in cache.", question)
+                log.debug("Reply found in cache.")
+                output = msg.translate_response(output, question)
                 events.reply.emit(reply=AIReply.final(output))
         except (RuntimeError, NotImplementedError, ImpossibleQuery, DocumentsNotFound) as err:
             events.reply.emit(reply=AIReply.error(err))

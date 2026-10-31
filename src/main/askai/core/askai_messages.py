@@ -15,8 +15,10 @@ Copyright (c) 2024, AskAI
 from askai.core.askai_configs import configs
 from askai.language.ai_translator import AITranslator
 from askai.language.language import Language
+from askai.language.detection import detect_language, language_for, prose
 from askai.language.translators.deepl_translator import DeepLTranslator
 from functools import cached_property, lru_cache
+from askai.core.support.cache_policy import optional_cache
 from hspylib.core.metaclass.classpath import AnyPath
 from hspylib.core.metaclass.singleton import Singleton
 from typing import AnyStr
@@ -55,26 +57,38 @@ class AskAiMessages(metaclass=Singleton):
     def translator(self) -> AITranslator:
         return AskAiMessages.get_translator(Language.EN_US)
 
-    def translate(self, text: AnyStr) -> str:
-        """Translate text using the configured language.
+    def translate(self, text: AnyStr, source_lang: Language | None = Language.EN_US) -> str:
+        """Localize app messages, authored in en_US, using the configured language.
         :param text: The text to be translated.
+        :param source_lang: Authored source when detection is inconclusive; None for unknown sources.
         :return: The translated text.
         """
         # Avoid translating debug messages.
         if re.match(r"^~~\[DEBUG]~~", str(text), flags=re.IGNORECASE | re.DOTALL | re.MULTILINE):
             return text
-        return self._translate(str(text), configs.language)
+        return self._translate(str(text), configs.language, source_lang)
 
-    @lru_cache(maxsize=256)
-    def _translate(self, text: str, target_lang: Language) -> str:
-        return self._get_translator(Language.EN_US, target_lang).translate(text)
+    @optional_cache(maxsize=256)
+    def _translate(self, text: str, target_lang: Language, source_hint: Language | None = None) -> str:
+        if not any(character.isalpha() for character in prose(text)):
+            return text
+        detected = detect_language(text)
+        source = language_for(detected, source_hint) if detected else source_hint
+        if source is None or source.language == target_lang.language:
+            return text
+        return self._get_translator(source, target_lang).translate(text)
+
+    def translate_response(self, text: str, question: str) -> str:
+        """Match the question's language, independently of the interface locale."""
+        target_code = detect_language(question)
+        if target_code is None:
+            return text
+        target = language_for(target_code, configs.language)
+        return self._translate(text, target) if target else text
 
     def t(self, text: AnyStr) -> str:
-        """Wrapper to translate.
-        :param text: The text to be translated.
-        :return: The translated text.
-        """
-        return self.translate(text)
+        """Localize app strings whose authored source language is English."""
+        return self.translate(text, source_lang=Language.EN_US)
 
     # Informational
 
@@ -178,17 +192,11 @@ class AskAiMessages(metaclass=Singleton):
                 cl = ""
         return f"~~[DEBUG]~~ Accuracy result => {cl}{status}:%NC% {details}"
 
-    def action_plan(self, plan_text: AnyStr) -> str:
-        return f"~~[DEBUG]~~ Action plan > {plan_text}"
-
     def x_reference(self, pathname: AnyPath) -> str:
         return f"~~[DEBUG]~~ Resolving X-References: `{pathname}`…"
 
     def describe_image(self, image_path: AnyPath) -> str:
         return f"~~[DEBUG]~~ Describing image: `{image_path}`…"
-
-    def model_select(self, model: AnyStr) -> str:
-        return f"~~[DEBUG]~~ Using routing model: `{model}`"
 
     def parsing_caption(self) -> str:
         return f"~~[DEBUG]~~ Parsing caption…"

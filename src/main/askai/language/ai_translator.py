@@ -16,6 +16,7 @@ from abc import ABC
 from askai.core.askai_events import events
 from askai.core.model.ai_reply import AIReply
 from askai.language.language import Language
+from askai.language.detection import detect_language, prose
 from typing import AnyStr
 
 import re
@@ -33,11 +34,20 @@ class AITranslator(ABC):
         :param text: The input text with [TAG]...[/TAG] and %TAG%...%TAG% formatting.
         :returns str: The translated text with original tags preserved.
         """
-        if self._source_lang == self._target_lang:
+        if self._source_lang.language == self._target_lang.language:
+            return text
+        content = prose(str(text))
+        if not any(character.isalpha() for character in content):
+            return text
+        source = detect_language(str(text)) or self._source_lang.language
+        if source == self._target_lang.language:
             return text
 
         # Regex to match [TAG]..[/TAG], %TAG%..%/TAG%, "..", and '..'
-        tag_pattern = re.compile(r'(\[/?\w+]|%/?\w+%|["\']\w+["\'])', re.IGNORECASE)
+        tag_pattern = re.compile(
+            r"(```[\s\S]*?```|`[^`]*`|https?://[^\s)]+|\[/?\w+]|%/?\w+%|[\"']\w+[\"'])",
+            re.IGNORECASE,
+        )
         parts = tag_pattern.split(text)  # Split the text into parts: tags and non-tags
         texts_to_translate = []
         indices = []
@@ -59,7 +69,7 @@ class AITranslator(ABC):
             parts[idx] = translated
 
         # Reassemble the translated text with tags
-        translated_text = " ".join(parts)
+        translated_text = "".join(parts)
 
         return translated_text
 

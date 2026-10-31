@@ -93,7 +93,7 @@ class AskAiApp(App[None]):
         if event.kind == "tool_progress":
             self.call_from_thread(self.notify, msg.t(event.data.get("message", "")))
         if event.kind == "stage" and event.data.get("stage") == "compaction":
-            self.call_from_thread(self.notify, msg.t("Compacting session…"))
+            self.call_from_thread(self.notify, msg.translate("Compactando histórico…"))
 
     def _agent_interaction(self, method: str, params: dict) -> dict:
         from askai.tui.agent_interaction import AgentInteraction
@@ -349,8 +349,9 @@ class AskAiApp(App[None]):
         """
         prev_msg: str = self._display_buffer[-1] if self._display_buffer else ""
         if reply and prev_msg != reply.message:
-            log.debug(reply.message)
-            text = reply.message.lstrip("\r\n")
+            if configs.is_keep_context:
+                log.debug(reply.message)
+            text = (reply.message if reply.is_final else msg.translate(reply.message)).lstrip("\r\n")
             rendered = f"{shared.nickname_md} {text}"
             if configs.is_speak and reply.is_speakable:
                 def failed(error):
@@ -395,8 +396,8 @@ class AskAiApp(App[None]):
         """
         prev_msg: str = self._display_buffer[-1] if self._display_buffer else ""
         if reply and prev_msg != reply.message:
-            log.error(reply.message)
-            self.display_text(f"{shared.nickname_md} Error: {reply.message}")
+            log.error(reply.message if configs.is_keep_context else "AskAI request failed (history disabled)")
+            self.display_text(f"{shared.nickname_md} {msg.t('Error')}: {msg.translate(reply.message)}")
             if configs.is_speak and reply.is_speakable:
                 shared.speech.speak(f"Error: {reply.message}", lambda error: events.reply.emit(reply=AIReply.error(str(error))))
 

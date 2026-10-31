@@ -18,7 +18,7 @@ from argostranslate.translate import ITranslation
 from askai.exception.exceptions import TranslationPackageError
 from askai.language.ai_translator import AITranslator
 from askai.language.language import Language
-from functools import lru_cache
+from askai.core.support.cache_policy import optional_cache
 from typing import AnyStr, Optional
 
 import logging as log
@@ -64,7 +64,7 @@ class ArgosTranslator(AITranslator):
             argos_model = self._get_argos_model(source_lang, target_lang)
         self._argos_model = argos_model
 
-    @lru_cache
+    @optional_cache()
     def _translate_text(self, text: AnyStr, **kwargs) -> str:
         """Translate text from the source language to the target language.
         :param text: Text to translate.

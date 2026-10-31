@@ -1,6 +1,6 @@
 from askai.language.ai_translator import AITranslator
 from askai.language.language import Language
-from functools import lru_cache
+from askai.core.support.cache_policy import optional_cache
 from transformers import MarianMTModel, MarianTokenizer
 from typing import AnyStr
 
@@ -21,7 +21,7 @@ class MarianTranslator(AITranslator):
         self._model = MarianMTModel.from_pretrained(self.MODEL_NAME)
         self._tokenizer = MarianTokenizer.from_pretrained(self.MODEL_NAME)
 
-    @lru_cache
+    @optional_cache()
     def _translate_text(self, text: AnyStr, **kwargs) -> str:
         """Translate text from the source language to the target language.
         :param text: Text to translate.

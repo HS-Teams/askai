@@ -18,9 +18,9 @@ class MessageLanguageCacheTests(unittest.TestCase):
 
         with patch("askai.core.askai_messages.configs", settings), patch.object(
             AskAiMessages, "TRANSLATOR", side_effect=factory
-        ) as translator:
-            self.assertEqual(msg.translate("Allow?"), "en_US: Allow?")
+        ) as translator, patch("askai.core.askai_messages.detect_language", return_value="en"):
+            self.assertEqual(msg.translate("Allow?"), "Allow?")
             settings.language = Language.PT_BR
             self.assertEqual(msg.translate("Allow?"), "pt_BR: Allow?")
             self.assertEqual(msg.translate("Allow?"), "pt_BR: Allow?")
-            self.assertEqual(translator.call_count, 2)
+            self.assertEqual(translator.call_count, 1)
