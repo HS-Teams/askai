@@ -16,7 +16,7 @@ from askai.core.askai_configs import AskAiConfigs
 from askai.core.engine.ai_model import AIModel
 from askai.core.engine.ai_vision import AIVision
 from askai.core.model.ai_reply import AIReply
-from typing import Optional, Protocol
+from typing import Protocol
 
 
 class AIEngine(Protocol):

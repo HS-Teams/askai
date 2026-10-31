@@ -15,7 +15,6 @@ class InputContextTests(unittest.TestCase):
                 self.fail("oversized input accepted")
 
     def test_token_budget_is_checked(self):
-        with patch.dict("os.environ", {"ASKAI_CONTEXT_BUDGET": "1024"}):
-            with self.assertRaises(AgentError):
-                with prepared_input("word " * 3000):
-                    self.fail("token budget exceeded")
+        with self.assertRaises(AgentError):
+            with prepared_input("word " * 3000, context_window=1024):
+                self.fail("model context window exceeded")

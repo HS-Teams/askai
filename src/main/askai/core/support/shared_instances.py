@@ -13,6 +13,7 @@
 Copyright (c) 2024, AskAI
 """
 from askai.core.support.short_term_memory import ShortTermMemory
+from askai.core.support.number_format import compact_count
 
 from askai.__classpath__ import classpath
 from askai.core.askai_configs import configs
@@ -134,7 +135,9 @@ class SharedInstances(metaclass=Singleton):
         cur_dir = elide_text(str(Path(os.getcwd()).absolute()), 67, "…")
         translator = f"translated by '{msg.translator.name()}'" if configs.language.name.title() != "English" else ""
         eng: AIEngine = shared.engine
-        model_info: str = f"'{eng.ai_model_name()}'%YELLOW% {eng.ai_token_limit()}%GREEN% tokens"
+        capacity = eng.ai_token_limit()
+        capacity_label = compact_count(capacity) if capacity is not None else msg.t("Not reported")
+        model_info: str = f"'{eng.ai_model_name()}'%YELLOW% {capacity_label}%GREEN% tokens"
         engine_info: str = f"{eng.ai_name()} - %CYAN%{eng.nickname()} / {model_info}"
         rag_info: str = "%GREEN% " if configs.is_rag else "%RED% "
         assist_info: str = "%GREEN% " if configs.is_assistive else "%RED% "
@@ -155,7 +158,7 @@ class SharedInstances(metaclass=Singleton):
             {'.' * 80}
                 History: {' ' if configs.is_keep_context else '%RED% '} %GREEN%
                   Debug: {' ' if configs.is_debug else '%RED% '} %GREEN%
-                  Cache: {' , TTL: ' + str(configs.ttl) if configs.is_cache else '%RED% '} %GREEN%
+                  Cache: {' , ' + msg.t('Response TTL') + ': ' + str(configs.ttl) + ' min' if configs.is_cache else '%RED% '} %GREEN%
             {'=' * 80}%NC%
 
             """)
@@ -173,7 +176,7 @@ class SharedInstances(metaclass=Singleton):
             self._mode = mode
         return self._engine
 
-    def create_context(self, token_limit: int) -> ChatContext:
+    def create_context(self, token_limit: int | None) -> ChatContext:
         """Create or retrieve a chat context with the specified token limit.
         :param token_limit: The maximum number of tokens allowed in the chat context.
         :return: An instance of the ChatContext configured with the specified token limit.

@@ -14,6 +14,7 @@
 """
 
 from askai.core.component.cache_service import cache
+from askai.core.askai_configs import configs
 from askai.exception.exceptions import TokenLengthExceeded
 from collections import defaultdict, deque, namedtuple
 from functools import partial, reduce
@@ -28,16 +29,16 @@ ContextRaw: TypeAlias = list[dict[str, str]]
 
 ChatEntries: TypeAlias = list[tuple[str, str]]
 
-ContextEntry = namedtuple("ContextEntry", ["role", "content"])
+ContextEntry = namedtuple("ContextEntry", ["role", "content", "recordable"], defaults=[True])
 
 
 class ChatContext:
     """Provide a chat context helper for AI engines."""
 
 
-    def __init__(self, token_limit: int, max_context_size: int):
+    def __init__(self, token_limit: int | None, max_context_size: int):
         self._store: dict[AnyStr, deque] = defaultdict(partial(deque, maxlen=max_context_size))
-        self._token_limit: int = token_limit * 1024  # The limit is given in KB
+        self._token_limit: int | None = token_limit
         self._max_context_size: int = max_context_size
 
     def __str__(self):
@@ -66,7 +67,7 @@ class ChatContext:
         return self._max_context_size
 
     @property
-    def token_limit(self) -> int:
+    def token_limit(self) -> int | None:
         return self._token_limit
 
     def push(self, key: str, content: Any, role: ChatRoles = "human") -> ContextRaw:
@@ -77,9 +78,9 @@ class ChatContext:
         :return: The updated chat context.
         """
         check_argument(role in get_args(ChatRoles), f"Invalid ChatRole: '{role}'")
-        if (token_length := (self.length(key)) + len(content)) > self._token_limit:
+        if self._token_limit is not None and (token_length := (self.length(key)) + self._count_tokens(content)) > self._token_limit:
             raise TokenLengthExceeded(f"Required token length={token_length}  limit={self._token_limit}")
-        if (entry := ContextEntry(role, str(content).strip())) not in (ctx := self.store[key]):
+        if (entry := ContextEntry(role, str(content).strip(), configs.is_keep_context)) not in (ctx := self.store[key]):
             ctx.append(entry)
 
         return self.get(key)
@@ -115,13 +116,19 @@ class ChatContext:
                 del ctx[index]
         return val
 
+    @staticmethod
+    def _count_tokens(text: str) -> int:
+        import tiktoken
+
+        return len(tiktoken.get_encoding("cl100k_base").encode(str(text), disallowed_special=()))
+
     def length(self, key: str):
         """Return the length of the context identified by the specified key.
         :param key: The identifier for the context.
         :return: The length of the context (e.g., number of content entries).
         """
         ctx = self.store[key]
-        return reduce(lambda total, e: total + len(e.content), ctx, 0) if len(ctx) > 0 else 0
+        return reduce(lambda total, e: total + self._count_tokens(e.content), ctx, 0) if len(ctx) > 0 else 0
 
     def join(self, *keys: str) -> ChatEntries:
         """Join multiple contexts identified by the specified keys.
@@ -133,9 +140,9 @@ class ChatContext:
         for key in keys:
             ctx: ContextRaw = self.get(key)
             content: str = os.linesep.join([tk["content"] for tk in ctx])
-            token_length += len(content or "")
-            if token_length > self._token_limit:
-                raise TokenLengthExceeded(f"Required token length={token_length}k  limit={self._token_limit}k")
+            token_length += self._count_tokens(content or "")
+            if self._token_limit is not None and token_length > self._token_limit:
+                raise TokenLengthExceeded(f"Required token length={token_length}  limit={self._token_limit}")
             if content and ctx not in context:
                 list(map(context.append, [(t["role"], t["content"]) for t in ctx]))
         return context
@@ -178,6 +185,6 @@ class ChatContext:
 
     def save(self) -> None:
         """Save the current context window to the cache."""
-        ctx: ChatEntries = self.join(*self.store.keys())
-        ctx_str: list[str] = [f"{role}: {msg}" for role, msg in ctx]
+        ctx_str = [f"{entry.role}: {entry.content}" for entries in self.store.values()
+                   for entry in entries if entry.recordable]
         cache.save_context(ctx_str)
