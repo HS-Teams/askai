@@ -56,18 +56,20 @@ STM and saved preferences remain intact. A reset is rejected while a task runs.
 - `/history` or `/history list`: list recorded conversations grouped by date and
   session for the selected agent and working directory.
 - `/history list YYYY-MM-DD`: show one local session date.
-- `/history enable 1`: persist automatic session resume after restart.
-- `/history enable 0`: disable automatic resume after restart, keeping continuity
-  while the app runs. STM remains available; its startup restoration follows the
-  same existing setting.
+- `/history enable 1`: record conversations and resume saved sessions (default ON).
+- `/history enable 0`: stop journal, keyboard history and memory snapshot recording
+  and do not restore saved conversations. Codex uses an ephemeral session, retained
+  in memory only while AskAI runs. STM stays available. The UI uses a temporary
+  transcript that is removed on exit. Switching the flag separates native sessions;
+  private STM entries are excluded from subsequent snapshots.
 - `/history forget`: clear keyboard input history only. It does not erase the
   durable journal or reset the agent; use `/session reset` for a new session.
 
 The listing distinguishes final answers, failed requests and unfinished requests.
 New records retain their actual session ID even after a reset on the same date.
 Older records lacking session/date metadata are shown as not recorded in the
-unfiltered listing; their association is not guessed. Disabling History does not
-stop local journal recording or delete sessions stored by the agent runtime.
+unfiltered listing; their association is not guessed. Disabling History preserves
+previously saved data. Automatic exit compaction is skipped while History is OFF.
 
 ## Compact the native session
 

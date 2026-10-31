@@ -26,6 +26,9 @@ class TaiusProcessor:
             self._orchestrator.cancelled.set()
 
     def reset_session(self):
+        from askai.core.askai_configs import configs
+        if not configs.is_keep_context and self._orchestrator is None:
+            return
         if self._orchestrator:
             self._orchestrator.reset_session(Path.cwd())
         else:
@@ -41,6 +44,9 @@ class TaiusProcessor:
             )
 
     def compact_session(self, *, wait=False):
+        from askai.core.askai_configs import configs
+        if not configs.is_keep_context:
+            return False
         if self._orchestrator:
             return self._orchestrator.compact_session(Path.cwd(), self.emit, wait=wait)
         from datetime import date
@@ -68,7 +74,7 @@ class TaiusProcessor:
         from askai.core.askai_messages import msg
         import logging
 
-        if self._exit_compaction_done or not configs.compact_on_exit or self._orchestrator is None:
+        if self._exit_compaction_done or not configs.is_keep_context or not configs.compact_on_exit or self._orchestrator is None:
             return
         self._exit_compaction_done = True
         if self._orchestrator.cancelled.is_set():

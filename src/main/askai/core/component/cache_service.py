@@ -19,7 +19,7 @@ from collections import namedtuple
 from hspylib.core.enums.charset import Charset
 from hspylib.core.metaclass.singleton import Singleton
 from hspylib.core.tools.commons import file_is_not_empty, touch_file
-from hspylib.core.tools.text_tools import ensure_endswith, hash_text
+from hspylib.core.tools.text_tools import hash_text
 from hspylib.modules.cache.ttl_cache import TTLCache
 from askai.core.support.short_term_memory import Message
 from pathlib import Path
@@ -122,12 +122,16 @@ class CacheService(metaclass=Singleton):
         :param audio_format: The audio file format (default is "mp3").
         :return: A tuple containing the hashed file path as a string and a boolean indicating if the file exists.
         """
+        if not configs.is_cache:
+            from askai.core.support.cache_policy import transient_audio_path
+            return transient_audio_path(audio_format)
         key = f"{text.strip().lower()}-{hash_text(voice)}"
         audio_file_path = f"{str(AUDIO_DIR)}/askai-{hash_text(key)}.{audio_format}"
         return audio_file_path, file_is_not_empty(audio_file_path)
 
     def __init__(self):
-        keys: str | None = self._TTL_CACHE.read(self.ASKAI_CACHE_KEYS)
+        self._private_inputs = set()
+        keys: str | None = self._TTL_CACHE.read(self.ASKAI_CACHE_KEYS) if configs.is_cache else None
         self._cache_keys: set[str] = set(map(str.strip, keys.split(",") if keys else {}))
 
     @property
@@ -181,6 +185,8 @@ class CacheService(metaclass=Singleton):
         """Retrieve line input queries from the history file.
         :return: A list of input queries stored in the cache.
         """
+        if not configs.is_keep_context:
+            return []
         history: str = ASKAI_INPUT_HISTORY_FILE.read_text()
         inputs = list(filter(str.__len__, map(str.strip, history.split(os.linesep))))
 
@@ -190,7 +196,12 @@ class CacheService(metaclass=Singleton):
         """Save input queries into the history file.
         :param history: A list of input queries to be saved. If None, the current input history will be saved.
         """
-        if history := (history or KeyboardInput.history()):
+        inputs = history if history is not None else KeyboardInput.history()
+        if not configs.is_keep_context:
+            self._private_inputs.update(inputs)
+            return
+        history = list(dict.fromkeys(self.read_input_history() + [item for item in inputs if item not in self._private_inputs]))
+        if history:
             with open(str(ASKAI_INPUT_HISTORY_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
                 list(
                     map(
@@ -214,6 +225,8 @@ class CacheService(metaclass=Singleton):
         """Save the context window entries into the context file.
         :param context: A list of context entries to be saved.
         """
+        if not configs.is_keep_context:
+            return None
         if context := (context or list()):
             with open(str(ASKAI_CONTEXT_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
                 list(map(lambda h: f_hist.write(h + "\n"), context))
@@ -221,6 +234,8 @@ class CacheService(metaclass=Singleton):
     def read_context(self) -> list[str]:
         """Read the context window entries from the context file.
         :return: A list of context entries retrieved from the cache."""
+        if not configs.is_keep_context:
+            return []
         flags: int = re.MULTILINE | re.DOTALL | re.IGNORECASE
         context: str = ASKAI_CONTEXT_FILE.read_text()
         return list(filter(str.__len__, map(str.strip, re.split(r"(human|assistant|system):", context, flags=flags))))
@@ -229,11 +244,13 @@ class CacheService(metaclass=Singleton):
         """Save the context window entries into the context file.
         :param memory: A list of memory entries to be saved.
         """
+        if not configs.is_keep_context:
+            return None
 
         def _get_role_(msg: Message) -> str:
             return "human" if msg.role == "user" else msg.role
 
-        if memory := (memory or list()):
+        if memory := [message for message in (memory or []) if message.recordable]:
             with open(str(ASKAI_MEMORY_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
                 list(map(lambda m: f_hist.write(f"{_get_role_(m)}: {m.content}\n"), memory))
 
@@ -241,6 +258,8 @@ class CacheService(metaclass=Singleton):
         """Reads and parses the memory from the context file.
         :return: A list of non-empty, stripped strings split by roles (human, assistant, system).
         """
+        if not configs.is_keep_context:
+            return []
         flags: int = re.MULTILINE | re.DOTALL | re.IGNORECASE
         memory: str = ASKAI_MEMORY_FILE.read_text()
         return list(filter(str.__len__, map(str.strip, re.split(r"(human|assistant|system):", memory, flags=flags))))

@@ -37,6 +37,7 @@ class Orchestrator:
         self._active = Lock()
         self._sessions: dict[tuple[str, str], str] = {}
         self._last_session_key = None
+        self._record_history = None
 
     def reset_session(self, cwd: Path) -> None:
         if not self._active.acquire(blocking=False):
@@ -46,7 +47,7 @@ class Orchestrator:
         try:
             day = self._today().isoformat()
             key = str(cwd.resolve())
-            if self._durable:
+            if self._durable and self._resume_history():
                 self._durable.reset_session(self._agent_name, key, day)
             self._sessions.pop((key, day), None)
             self._last_session_key = None
@@ -61,7 +62,7 @@ class Orchestrator:
             if wait and self.cancelled.is_set():
                 return False
             key, day = self._last_session_key or (str(cwd.resolve()), self._today().isoformat())
-            if self._durable is None:
+            if self._durable is None or not self._resume_history():
                 return False
             from askai.core.orchestration.session_compaction import compact_saved_session
 
@@ -85,8 +86,12 @@ class Orchestrator:
         session_key = (key, day)
         self._last_session_key = session_key
         original_emit, original_interact = emit, interact
+        recording = bool(self._resume_history())
+        if self._record_history is not None and self._record_history != recording:
+            self._sessions.clear()
+        self._record_history = recording
         try:
-            if self._durable:
+            if self._durable and recording:
                 request = self._durable.begin(self._agent_name, key, question, day=day)
                 if session_key not in self._sessions and self._resume_history():
                     session = self._durable.session(self._agent_name, key, day)
@@ -132,7 +137,7 @@ class Orchestrator:
                     return decision
 
             answer = self._process(question, cwd, context, emit, interact, day)
-            if self._durable:
+            if self._durable and request:
                 self._durable.record(
                     self._agent_name,
                     key,
@@ -157,7 +162,7 @@ class Orchestrator:
         self, question: str, cwd: Path, context: str, emit, interact, day: str
     ) -> str:
         self.cancelled.clear()
-        self._memory.add("human", question)
+        self._memory.add("human", question, recordable=bool(self._record_history))
         self._memory.pending["objective"] = question
         emit(AgentEvent("stage", "", data={"stage": "retrieval"}))
         with timed("retrieval_and_connection"):
@@ -180,6 +185,7 @@ class Orchestrator:
             self._sessions.get(key),
             model=self._model,
             session_name=day,
+            persist_history=self._record_history,
         )
         emit(AgentEvent("stage", "", data={"stage": "execution"}))
         with timed("execution"):
@@ -215,6 +221,6 @@ class Orchestrator:
                 answer = self._refine(question, answer, assessment)
         if not answer or not answer.strip():
             raise AgentError("Taius produced no final answer")
-        self._memory.add("assistant", answer)
+        self._memory.add("assistant", answer, recordable=bool(self._record_history))
         self._memory.pending.pop("objective", None)
         return answer

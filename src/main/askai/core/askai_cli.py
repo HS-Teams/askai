@@ -144,7 +144,7 @@ class AskAiCli(AskAi):
         :param reply: The error reply message to be displayed to the user.
         """
         if reply and (text := msg.translate(reply.message)):
-            log.error(reply.message)
+            log.error(reply.message if configs.is_keep_context else "AskAI request failed (history disabled)")
             if configs.is_speak and reply.is_speakable:
                 display_text(f"Error: {text}", f"{shared.nickname}")
                 shared.speech.speak(f"Error: {text}", lambda error: events.reply.emit(reply=AIReply.error(str(error))))

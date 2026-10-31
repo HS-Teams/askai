@@ -209,7 +209,7 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(backend.run.call_args.args[0].session_id, "current")
         enabled[0] = True
         restarted.process("still here", self.cwd, "", Mock(), Mock())
-        self.assertEqual(backend.run.call_args.args[0].session_id, "current")
+        self.assertEqual(backend.run.call_args.args[0].session_id, "previous")
         self.service(backend).process("resume enabled", self.cwd, "", Mock(), Mock())
         self.assertEqual(backend.run.call_args.args[0].session_id, "current")
         entries = PersistentMemory(self.path).conversations("codex", str(self.cwd))
@@ -247,3 +247,22 @@ class PersistenceTests(unittest.TestCase):
         self.assertIsNone(entries[0]["answer"])
         self.assertIsNone(entries[1]["answer"])
         self.assertIsNone(entries[1]["session"])
+
+    def test_history_off_does_not_record_actions_decisions_answers_or_failures(self):
+        def run(task, emit, interact, cancel):
+            self.assertFalse(task.persist_history)
+            emit(AgentEvent('started', 'private', 't'))
+            interact('approval', {'command': 'example'})
+            emit(AgentEvent('tool_completed', 'private', 't', {'exitCode': 0}))
+            return AgentResult('private', 't', 'private answer', 'completed')
+        backend = Mock(run=Mock(side_effect=run))
+        service = self.service(backend)
+        service._resume_history = lambda: False
+        service.process('private question', self.cwd, '', Mock(), Mock(return_value={'decision': 'accept'}))
+        self.assertEqual(PersistentMemory(self.path).conversations('codex', str(self.cwd)), [])
+        self.assertTrue(service._memory.messages)
+        self.assertTrue(all(not message.recordable for message in service._memory.messages))
+        backend.run.side_effect = RuntimeError('private failure')
+        with self.assertRaises(RuntimeError):
+            service.process('another private question', self.cwd, '', Mock(), Mock())
+        self.assertEqual(PersistentMemory(self.path).conversations('codex', str(self.cwd)), [])

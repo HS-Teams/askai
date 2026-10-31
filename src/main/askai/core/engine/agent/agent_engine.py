@@ -3,7 +3,6 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 import json
-import os
 from pathlib import Path
 from threading import Event
 
@@ -19,9 +18,6 @@ class AgentEngine:
         self.backend = create_backend(self.name)
         self._session = ContextVar("agent_review_session", default=None)
         self._embeddings = None
-        self._budget = int(os.getenv("ASKAI_CONTEXT_BUDGET", "32768"))
-        if self._budget <= 0:
-            raise ValueError("ASKAI_CONTEXT_BUDGET must be positive")
 
     def nickname(self):
         return self.name.title()
@@ -33,7 +29,7 @@ class AgentEngine:
         return self.model or "runtime default"
 
     def ai_token_limit(self):
-        return self._budget
+        return self.backend.context_window(self.model)
 
     def configs(self):
         from askai.core.askai_configs import configs
@@ -73,6 +69,8 @@ class AgentEngine:
                 model=self.model,
                 output_schema=schema,
                 read_only=True,
+                persist_history=(self.configs().is_keep_context and
+                                 self.backend.session_is_private(self._session.get()) is not True),
             ),
             lambda event: None,
             deny,

@@ -20,6 +20,7 @@ class AgentTask:
     output_schema: dict | None = None
     read_only: bool = False
     session_name: str | None = None
+    persist_history: bool = True
 
 
 @dataclass(frozen=True)

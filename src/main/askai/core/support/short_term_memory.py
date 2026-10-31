@@ -8,6 +8,7 @@ from dataclasses import dataclass
 class Message:
     role: str
     content: str
+    recordable: bool = True
 
 
 class ShortTermMemory:
@@ -21,10 +22,10 @@ class ShortTermMemory:
     def messages(self) -> list[Message]:
         return list(self._messages)
 
-    def add(self, role: str, content: str) -> None:
+    def add(self, role: str, content: str, *, recordable: bool = True) -> None:
         if role not in {"human", "user", "assistant", "system"}:
             raise ValueError(f"Invalid message role: {role}")
-        self._messages.append(Message(role, content))
+        self._messages.append(Message(role, content, recordable))
 
     def clear(self) -> None:
         self._messages.clear()
