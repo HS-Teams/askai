@@ -34,44 +34,43 @@ class TtsSttCmd(ABC):
 
     @staticmethod
     def voice_list() -> None:
-        """List all available voices for the current engine/model."""
-        all_voices = shared.engine.voices()
-        str_voices = "\n".join([f"{i}. {v.title()}" for i, v in enumerate(all_voices)])
+        speech = shared.speech.tts
+        voices = "\n".join(f"{i}. {voice}" for i, voice in enumerate(speech.voices()))
         text_formatter.commander_print(
-            f"Available `{shared.engine.configs().stt_model}` voices: \n"
-            f"\n{str_voices}\n> Hint: Type: '/voices set \\<number|voice_name\\>' to select a voice. "
-            f"To hear a sample use: '/voices play \\<number|voice_name\\>'"
+            f"Available `{speech.model_name}` voices:\n{voices}\n"
+            f"Current voice: `{speech.voice}`\n"
+            '> Use `/voices set "voice name"` or `/voices play <number|voice_name>`.'
         )
 
     @staticmethod
     def voice_set(name_or_index: str | int | None = None) -> None:
-        """Set the specified voice for the current engine.
-        :param name_or_index: The name or index of the voice to set. If None, the default voice will be used.
-        """
-        all_voices = shared.engine.voices()
-        if name_or_index and name_or_index.isdecimal() and 0 <= int(name_or_index) <= len(all_voices):
-            name_or_index = all_voices[int(name_or_index)]
-        if name_or_index and name_or_index in all_voices:
-            settings.put("openai.text.to.speech.voice", name_or_index)
-            shared.engine.configs().tts_voice = name_or_index
-            text_formatter.commander_print(f"`Speech-To-Text` voice changed to %GREEN%{name_or_index.title()}%NC%")
-        else:
-            text_formatter.commander_print(f"%RED%Invalid voice name/index: '{name_or_index}'%NC%")
+        speech = shared.speech.tts
+        if voice := TtsSttCmd._resolve_voice(name_or_index):
+            speech.select_voice(voice)
+            text_formatter.commander_print(f"Voice changed to `{voice}`")
 
     @staticmethod
     def voice_play(name_or_index: str | int | None = None) -> None:
-        """Play a sample using the specified voice.
-        :param name_or_index: The name or index of the voice to use for the sample. If None, the default voice will be used.
-        """
-        all_voices = shared.engine.voices()
-        ai_name = shared.engine.ai_name().lower().replace("engine", "")
-        if name_or_index and name_or_index.isdecimal() and 0 <= int(name_or_index) <= len(all_voices):
-            name_or_index = all_voices[int(name_or_index)]
-        if name_or_index and name_or_index in all_voices:
-            text_formatter.commander_print(f"Sampling voice `{name_or_index}` …")
-            player.play_sfx(f"voices/{ai_name}-{name_or_index}-sample")
+        if voice := TtsSttCmd._resolve_voice(name_or_index):
+            shared.speech.tts.synthesize(
+                "Hello! This is a sample of my voice.", stream=False, voice=voice
+            )
+
+    @staticmethod
+    def _resolve_voice(name_or_index: str | int | None) -> str | None:
+        speech = shared.speech.tts
+        voices = speech.voices()
+        value = str(name_or_index) if name_or_index is not None else speech.voice
+        if value.isdecimal():
+            index = int(value)
+            if 0 <= index < len(voices):
+                return voices[index]
         else:
-            text_formatter.commander_print(f"%RED%Invalid voice name/index: '{name_or_index}'%NC%")
+            for voice in voices:
+                if voice.casefold() == value.casefold():
+                    return voice
+        text_formatter.commander_print(f"%RED%Invalid voice name/index: '{value}'%NC%")
+        return None
 
     @staticmethod
     def tempo(speed: int | None = None) -> None:
@@ -132,7 +131,7 @@ class TtsSttCmd(ABC):
         :param dest_dir: The directory where the audio file will be saved (default is the current working directory).
         :param playback: Whether to play back the generated speech after conversion (default is True).
         """
-        if (audio_path := shared.engine.text_to_speech(text, stream=False, playback=playback)) and audio_path.exists():
+        if (audio_path := shared.speech.tts.synthesize(text, stream=False, playback=playback)) and audio_path.exists():
             if dest_dir and ((dest_path := Path(dest_dir)) and dest_path.exists()):
                 audio_path = copy_file(audio_path, dest_dir)
             text_formatter.commander_print(f"File %GREEN%'{audio_path}' was successfully saved!%NC%")
