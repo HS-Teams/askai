@@ -142,6 +142,9 @@ class SharedInstances(metaclass=Singleton):
         rag_info: str = "%GREEN% " if configs.is_rag else "%RED% "
         assist_info: str = "%GREEN% " if configs.is_assistive else "%RED% "
 
+        tts_reason = getattr(self.speech.tts, 'failure_reason', None)
+        tts_details = ("\n           " + msg.t('TTS fallback reason') + ": " + msg.t(tts_reason)) if tts_reason else ""
+
         # fmt: off
         return dedent(f"""\
             %GREEN%AskAI %YELLOW%v{Version.load(load_dir=classpath.source_path)}%GREEN%
@@ -154,6 +157,7 @@ class SharedInstances(metaclass=Singleton):
                      OS: {prompt.os_type}/{prompt.shell}
             {'-' * 80}
              Microphone: %CYAN%{device_info or '%RED%Undetected'} %GREEN%
+             TTS Engine: %CYAN%{getattr(self.speech.tts, 'provider_name', configs.tts_engine)} %GREEN%{tts_details}
                Speaking: {' , tempo: ' + speak_info if configs.is_speak else '%RED% '} %GREEN%
             {'.' * 80}
                 History: {' ' if configs.is_keep_context else '%RED% '} %GREEN%

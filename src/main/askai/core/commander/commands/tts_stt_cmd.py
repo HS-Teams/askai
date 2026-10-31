@@ -33,8 +33,10 @@ class TtsSttCmd(ABC):
 
     @staticmethod
     def voice_list() -> None:
-        speech = shared.speech.tts
-        voices = "\n".join(f"{i}. {voice}" for i, voice in enumerate(speech.voices()))
+        active = shared.speech.tts
+        speech = getattr(active, "voice_engine", active)
+        refresh = getattr(speech, "refresh_voices", speech.voices)
+        voices = "\n".join(f"{i}. {voice}" for i, voice in enumerate(refresh()))
         text_formatter.commander_print(
             f"Available `{speech.model_name}` voices:\n{voices}\n"
             f"Current voice: `{speech.voice}`\n"
@@ -51,15 +53,20 @@ class TtsSttCmd(ABC):
     @staticmethod
     def voice_play(name_or_index: str | int | None = None) -> None:
         if voice := TtsSttCmd._resolve_voice(name_or_index):
-            shared.speech.tts.synthesize(
+            active = shared.speech.tts
+            speech = getattr(active, "voice_engine", active)
+            speech.synthesize(
                 "Hello! This is a sample of my voice.", stream=False, voice=voice
             )
 
     @staticmethod
     def _resolve_voice(name_or_index: str | int | None) -> str | None:
-        speech = shared.speech.tts
+        active = shared.speech.tts
+        speech = getattr(active, "voice_engine", active)
         voices = speech.voices()
         value = str(name_or_index) if name_or_index is not None else speech.voice
+        if value and value == speech.voice:
+            return value
         if value.isdecimal():
             index = int(value)
             if 0 <= index < len(voices):

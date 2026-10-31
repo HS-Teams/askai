@@ -32,7 +32,7 @@ class SpeechContractTests(unittest.TestCase):
         for factory in (create_stt, create_tts):
             with self.subTest(factory=factory.__name__):
                 with self.assertRaises(ValueError):
-                    factory("elevenlabs")
+                    factory("unsupported-provider")
 
     def test_stt_transcribes_wav_without_capturing_microphone(self):
         buffer = io.BytesIO()

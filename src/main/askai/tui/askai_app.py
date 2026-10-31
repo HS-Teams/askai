@@ -352,14 +352,19 @@ class AskAiApp(App[None]):
             if configs.is_keep_context:
                 log.debug(reply.message)
             text = (reply.message if reply.is_final else msg.translate(reply.message)).lstrip("\r\n")
+            from askai.core.speech.narration import parse_narration
+            from askai.core.speech.presentation import format_narration
+            narration = parse_narration(text) if reply.is_final else None
+            spoken = narration.spoken if narration else text
+            text = format_narration(narration) if narration else text
             rendered = f"{shared.nickname_md} {text}"
-            if configs.is_speak and reply.is_speakable:
+            if configs.is_speak and reply.is_speakable and spoken:
                 def failed(error):
                     self._display_buffer.append(rendered)
                     events.reply.emit(reply=AIReply.error(str(error)))
                 shared.speech.speak(
-                    text, failed,
-                    present=lambda duration, cancelled: self._stream_spoken_reply(text, rendered, duration, cancelled),
+                    spoken, failed,
+                    present=lambda duration, cancelled: self._stream_spoken_reply(text, rendered, duration, cancelled, narration),
                 )
             elif reply.is_final:
                 self._display_buffer.append(rendered)
@@ -379,13 +384,19 @@ class AskAiApp(App[None]):
         self._display_buffer.append(rendered)
         self._speech_streaming = False
 
-    def _stream_spoken_reply(self, text, rendered, duration, cancelled):
-        from askai.core.speech.presentation import reveal_text
+    def _stream_spoken_reply(self, text, rendered, duration, cancelled, narration=None):
+        from askai.core.speech.audio_tags import strip_audio_tags
+        from askai.core.speech.presentation import NARRATION_PREFIX, reveal_text
 
+        before = (narration.before + NARRATION_PREFIX) if narration and narration.spoken else ""
+        spoken = strip_audio_tags(narration.spoken) if narration else text
         previous = self.call_from_thread(self._begin_spoken_reply)
         try:
-            reveal_text(text, duration, cancelled, lambda partial: self.call_from_thread(
-                self._update_spoken_reply, f"{previous}\n\n{shared.nickname_md} {partial}"
+            self.call_from_thread(
+                self._update_spoken_reply, f"{previous}\n\n{shared.nickname_md} {before}"
+            )
+            reveal_text(spoken, duration, cancelled, lambda partial: self.call_from_thread(
+                self._update_spoken_reply, f"{previous}\n\n{shared.nickname_md} {before}{partial}"
             ))
         finally:
             self.call_from_thread(self._finish_spoken_reply, rendered)
@@ -406,6 +417,13 @@ class AskAiApp(App[None]):
         :param markdown_text: the text to be displayed.
         """
         self._display_buffer.append(msg.translate(markdown_text))
+
+    def _cb_tts_fallback(self, ev: Event) -> None:
+        message = msg.t(
+            f"TTS switched from {ev.args.provider} to Ollama. Reason: {ev.args.reason}. "
+            "The configured default was not changed."
+        )
+        self.call_later(self.notify, message, title="TTS", severity="warning", timeout=15)
 
     def _cb_reply_event(self, ev: Event) -> None:
         """Callback to handle reply events.
@@ -462,6 +480,7 @@ class AskAiApp(App[None]):
         os.chdir(Path.home())
         askai_bus = AskAiEvents.bus(ASKAI_BUS_NAME)
         askai_bus.subscribe(REPLY_EVENT, self._cb_reply_event)
+        askai_bus.subscribe(TTS_FALLBACK_EVENT, self._cb_tts_fallback)
         from askai.core.support.startup import run_startup_tasks
         from askai.core.processors.rag import rag
 

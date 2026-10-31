@@ -84,7 +84,8 @@ class AskAiMessages(metaclass=Singleton):
         if target_code is None:
             return text
         target = language_for(target_code, configs.language)
-        return self._translate(text, target) if target else text
+        from askai.core.speech.narration import translate_narration
+        return translate_narration(text, lambda part: self._translate(part, target)) if target else text
 
     def t(self, text: AnyStr) -> str:
         """Localize app strings whose authored source language is English."""

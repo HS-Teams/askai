@@ -23,7 +23,7 @@ class SearchRefinementTests(unittest.TestCase):
         return model, answer
 
     def test_original_prompt_and_categories_reach_single_refinement_call(self):
-        expected = '1. **[Projeto](https://example.org)**: descrição.\n\n---\n\n` Programação`  **Fontes:** [Projeto](https://example.org)\n\n>  Termos: projeto'
+        expected = '1. **[Projeto](https://example.org)**: descrição.\n\n---\n\n` Programação`  **Fontes:** [Projeto](https://example.org)\n\n>  Termos: projeto\n\n<TTS>Descrição do projeto.</TTS>'
         model, answer = self.refine({'final_answer': expected})
         self.assertEqual(expected, answer)
         model.complete.assert_called_once()
@@ -36,8 +36,8 @@ class SearchRefinementTests(unittest.TestCase):
             self.assertNotIn(placeholder, instructions)
 
     def test_ordinary_answer_is_preserved_without_forcing_search_footer(self):
-        model, answer = self.refine({'final_answer': 'Bom dia! {Tudo bem?}'})
-        self.assertEqual('Bom dia! {Tudo bem?}', answer)
+        model, answer = self.refine({'final_answer': '<TTS>Bom dia! {Tudo bem?}</TTS>'})
+        self.assertEqual('<TTS>Bom dia! {Tudo bem?}</TTS>', answer)
         self.assertIn('never to greetings, local actions or RAG-only answers', model.complete.call_args.args[0][0]['content'])
 
     def test_refinement_report_is_still_rejected(self):

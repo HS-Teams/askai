@@ -30,7 +30,7 @@ class SpeechService:
         initialize = getattr(self.tts, "initialize", None)
         return initialize() if initialize else "Ollama voice selected."
 
-    def speak(self, text, on_error, *, present=None, wait=False):
+    def speak(self, text, on_error, *, present=None, wait=False, immediate=False):
         from askai.core.speech.output_queue import SpeechOutputQueue
         from askai.core.speech.playback import play_speech, synchronized_speech
         from askai.core.askai_configs import configs
@@ -47,7 +47,9 @@ class SpeechService:
                 (lambda path, cancelled: synchronized_speech(path, configs.tempo, cancelled, present, player.start_delay()))
                 if present is not None else None
             )
-            self._output.submit(text, presentation, on_error)
+            live = getattr(self.tts, 'speak_live', None) if immediate else None
+            perform = (lambda text, cancelled: live(text, cancelled, configs.tempo)) if callable(live) else None
+            self._output.submit(text, presentation, on_error, perform=perform)
         if wait:
             self._output.wait()
 

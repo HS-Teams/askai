@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import subprocess
+from askai.core.speech.audio_tags import strip_audio_tags
 from tempfile import NamedTemporaryFile
 
 
@@ -36,6 +37,7 @@ class LlamaSpeech:
     ) -> Path | None:
         from askai.core.component.cache_service import cache
 
+        text = strip_audio_tags(text)
         if not text.strip():
             return None
         selected = voice or self.voice

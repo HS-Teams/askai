@@ -58,6 +58,9 @@ class AskAiSettings(metaclass=Singleton):
             self.defaults()
         from askai.core.component.faces.models import DEFAULT_THRESHOLD
         for key, value in {
+            "askai.speech.tts.engine": "ElevenLabs",
+            "askai.elevenlabs.tts.model": "eleven_v4",
+            "askai.elevenlabs.tts.voice": "",
             "askai.camera.identity.sface.cosine.threshold": DEFAULT_THRESHOLD,
             "askai.camera.identity.caption.enabled": False,
         }.items():
@@ -80,6 +83,9 @@ class AskAiSettings(metaclass=Singleton):
         return self._settings.get(name)
 
     def __setitem__(self, name: str, item: Any) -> None:
+        if name == "askai.speech.tts.engine":
+            if str(item).strip().casefold() not in {"elevenlabs", "ollama", "auto"}:
+                raise ValueError("Available TTS engines: ElevenLabs, Ollama")
         if name.startswith("askai.grants."):
             from askai.core.permissions.grants import validate_setting
             item = validate_setting(name, item)

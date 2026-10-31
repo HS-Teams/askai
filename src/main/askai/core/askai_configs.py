@@ -44,7 +44,7 @@ class AskAiConfigs(metaclass=Singleton):
 
     @property
     def tts_engine(self) -> str:
-        return os.getenv("ASKAI_TTS_ENGINE") or settings.get("askai.speech.tts.engine") or "auto"
+        return os.getenv("ASKAI_TTS_ENGINE") or settings.get("askai.speech.tts.engine") or "ElevenLabs"
 
     @property
     def compact_on_exit(self) -> bool:

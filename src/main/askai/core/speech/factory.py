@@ -10,21 +10,23 @@ def create_stt(name: str) -> STTEngine:
 
 
 def create_tts(name: str) -> TTSEngine:
-    if name.strip().casefold() == "auto":
+    if name.strip().casefold() in {"auto", "elevenlabs"}:
+        from askai.core.askai_events import events
         from askai.core.askai_configs import configs
         from askai.core.askai_settings import settings
         from askai.core.component.cache_service import cache
         from askai.core.component.multimedia.audio_player import player
-        from askai.core.speech.codex_tts import CodexTTS
+        from askai.core.speech.elevenlabs_tts import ElevenLabsTTS
         from askai.core.speech.fallback_tts import FallbackTTS
 
         return FallbackTTS(
-            CodexTTS(settings, cache, lambda: configs.tempo),
+            ElevenLabsTTS(settings, cache, lambda: configs.tempo),
             lambda: create_tts("ollama"),
             lambda path: player.play_audio_file(path, configs.tempo),
+            notify=lambda provider, reason: events.tts_fallback.emit(provider=provider, reason=reason),
         )
     if name.strip().casefold() != "ollama":
-        raise ValueError(f"TTS engine '{name}' is not implemented. Available: auto, ollama.")
+        raise ValueError(f"TTS engine '{name}' is not implemented. Available: auto, elevenlabs, ollama.")
     from askai.core.engine.llama.llama_configs import LlamaConfigs
     from askai.core.engine.llama.llama_speech import LlamaSpeech
     from askai.core.engine.llama.ollama_client import OllamaClient

@@ -17,14 +17,14 @@ class SpeechOutputQueue:
         self._worker = Thread(target=self._run, name='askai-speech', daemon=True)
         self._worker.start()
 
-    def submit(self, text, present=None, on_error=None):
+    def submit(self, text, present=None, on_error=None, perform=None):
         if not text.strip():
             return
         with self._lock:
             if self._closed:
                 raise RuntimeError('Speech output is closed')
             try:
-                self._queue.put_nowait((text, self._generation, present, on_error))
+                self._queue.put_nowait((text, self._generation, present, on_error, perform))
             except Full as error:
                 raise RuntimeError('Speech output queue is full') from error
 
@@ -58,8 +58,11 @@ class SpeechOutputQueue:
             try:
                 if job is None:
                     return
-                text, cancelled, present, on_error = job
+                text, cancelled, present, on_error, perform = job
                 if cancelled.is_set():
+                    continue
+                if perform is not None:
+                    path = perform(text, cancelled)
                     continue
                 with timed('speech.synthesis'):
                     path = self._synthesize(text)

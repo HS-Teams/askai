@@ -48,7 +48,7 @@ class SpeechTests(unittest.TestCase):
                 {"askai.core.component.cache_service": SimpleNamespace(cache=cache)},
             ), patch("subprocess.run", side_effect=generate) as run:
                 for _ in range(2):
-                    self.speech.synthesize("hello", voice="Zoey", playback=False)
+                    self.speech.synthesize("[happy]hello", voice="Zoey", playback=False)
                 run.assert_called_once()
                 self.assertEqual(
                     cache.audio_file_path.call_args.args,

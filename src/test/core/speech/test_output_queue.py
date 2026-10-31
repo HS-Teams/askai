@@ -70,3 +70,24 @@ class SpeechQueueTests(unittest.TestCase):
             default_play.assert_not_called()
         finally:
             queue.close()
+
+    def test_initial_live_audio_starts_before_final_is_submitted_and_keeps_order(self):
+        started, finish = Event(), Event()
+        calls = []
+        def initial(text, cancelled):
+            calls.append(('initial', text))
+            started.set()
+            finish.wait(2)
+        queue = SpeechOutputQueue(lambda text: calls.append(('final', text)), Mock(), Mock())
+        try:
+            queue.submit('comment', perform=initial)
+            self.assertTrue(started.wait(1))
+            # The producer is free to process the final answer during the first audio.
+            queue.submit('answer')
+            self.assertEqual(calls, [('initial', 'comment')])
+            finish.set()
+            queue.wait()
+            self.assertEqual(calls, [('initial', 'comment'), ('final', 'answer')])
+        finally:
+            finish.set()
+            queue.close()

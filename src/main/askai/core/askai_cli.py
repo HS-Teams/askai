@@ -125,15 +125,20 @@ class AskAiCli(AskAi):
         from askai.core.support.text_formatter import text_formatter
 
         text = reply.message if reply.is_final else msg.translate(reply.message)
+        from askai.core.speech.narration import parse_narration
+        from askai.core.speech.presentation import format_narration
+        narration = parse_narration(text) if reply.is_final else None
+        spoken = narration.spoken if narration else text
+        text = format_narration(narration) if narration else text
         label = f"{self.mode.icon} Taius"
         render = lambda: render_answer(text_formatter.console, text, label) if reply.is_final else display_text(text, shared.nickname)
-        if configs.is_speak and reply.is_speakable:
+        if configs.is_speak and reply.is_speakable and spoken:
             def failed(error):
                 render()
                 events.reply.emit(reply=AIReply.error(str(error)))
             shared.speech.speak(
-                text, failed,
-                present=lambda duration, cancelled: stream_answer(text_formatter.console, text, label, duration, cancelled),
+                spoken, failed,
+                present=lambda duration, cancelled: stream_answer(text_formatter.console, text, label, duration, cancelled, narration),
                 wait=True,
             )
         else:
@@ -156,6 +161,16 @@ class AskAiCli(AskAi):
         :return: The user's input as a string, or None if no input is provided.
         """
         return shared.input_text(f"{shared.username}", f"{msg.t('Message')} {self.engine.nickname()}")
+
+    def _cb_tts_fallback(self, ev: Event) -> None:
+        if not self._ready:
+            self._pending_tts_fallback = ev
+            return
+        message = msg.t(
+            f"TTS switched from {ev.args.provider} to Ollama. Reason: {ev.args.reason}. "
+            "The configured default was not changed."
+        )
+        display_text(f"%YELLOW%{message}%NC%", "⚠ " + msg.t("Warning") + " · TTS: ", markdown=False)
 
     def _cb_reply_event(self, ev: Event) -> None:
         """Callback to handle reply events.
@@ -229,6 +244,7 @@ class AskAiCli(AskAi):
         # Start and manage the progress bar
         askai_bus = AskAiEvents.bus(ASKAI_BUS_NAME)
         askai_bus.subscribe(REPLY_EVENT, self._cb_reply_event)
+        askai_bus.subscribe(TTS_FALLBACK_EVENT, self._cb_tts_fallback)
         if configs.is_interactive:
             splash_thread: Thread = Thread(daemon=True, target=self._splash)
             splash_thread.start()
@@ -264,6 +280,10 @@ class AskAiCli(AskAi):
             askai_bus.subscribe(DEVICE_CHANGED_EVENT, self._cb_device_changed_event)
             askai_bus.subscribe(MODE_CHANGED_EVENT, self._cb_mode_changed_event)
             display_text(str(self), markdown=False)
+            pending = getattr(self, "_pending_tts_fallback", None)
+            if pending is not None:
+                self._pending_tts_fallback = None
+                self._cb_tts_fallback(pending)
             self._reply(AIReply.info(self.mode.welcome()))
         elif configs.is_speak:
             shared.speech.initialize_tts()

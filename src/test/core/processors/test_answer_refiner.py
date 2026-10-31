@@ -20,7 +20,7 @@ class TestAnswerRefiner(unittest.TestCase):
         return refine_response(self.model, self.template, **self.arguments)
 
     def test_returns_only_final_answer(self):
-        self.assertEqual(self.invoke(json.dumps({"final_answer": "Hello, Hjunior!"})), "Hello, Hjunior!")
+        self.assertEqual(self.invoke(json.dumps({"final_answer": "<TTS>Hello, Hjunior!</TTS>"})), "<TTS>Hello, Hjunior!</TTS>")
         self.assertEqual(self.model.complete.call_args.kwargs["schema"], RefinedResponse.model_json_schema())
         messages = self.model.complete.call_args.args[0]
         self.assertEqual(messages[0]["role"], "system")
@@ -29,11 +29,11 @@ class TestAnswerRefiner(unittest.TestCase):
 
     def test_assistive_prompt_is_composed_with_persona_and_same_schema(self):
         assistive = (Path(__file__).parents[3] / 'main/askai/resources/prompts/taius/taius-tts.txt').read_text()
-        self.model.complete.return_value = '{"final_answer":"Resumo acessível, Hjunior."}'
+        self.model.complete.return_value = '{"final_answer":"<TTS>Resumo acessível, Hjunior.</TTS>"}'
         answer = refine_response(
             self.model, self.template, assistive_instructions=assistive, **self.arguments
         )
-        self.assertEqual(answer, "Resumo acessível, Hjunior.")
+        self.assertEqual(answer, "<TTS>Resumo acessível, Hjunior.</TTS>")
         instructions = self.model.complete.call_args.args[0][0]['content']
         self.assertIn(assistive, instructions)
         self.assertIn("Jarvis's composed demeanor", instructions)
@@ -41,17 +41,17 @@ class TestAnswerRefiner(unittest.TestCase):
         self.assertEqual(self.model.complete.call_args.kwargs['schema'], RefinedResponse.model_json_schema())
 
     def test_normal_mode_does_not_apply_accessible_list_limit(self):
-        self.invoke('{"final_answer":"Hello!"}')
+        self.invoke('{"final_answer":"<TTS>Hello!</TTS>"}')
         instructions = self.model.complete.call_args.args[0][0]['content']
         self.assertIn("Jarvis's composed demeanor", instructions)
         self.assertNotIn('at most five representative entries', instructions)
 
     def test_preserves_markdown_and_whitespace(self):
-        answer = '\n# Title\n\n```python\nprint("hello")\n```\n\n[link](https://example.com)\n'
+        answer = '\n# Title\n\n```python\nprint("hello")\n```\n\n[link](https://example.com)\n<TTS>Introduction.</TTS>\n'
         self.assertEqual(self.invoke(json.dumps({"final_answer": answer})), answer)
 
     def test_unchanged_answer_obeys_same_contract(self):
-        self.assertEqual(self.invoke('{"final_answer":"Hello!"}'), "Hello!")
+        self.assertEqual(self.invoke('{"final_answer":"<TTS>Hello!</TTS>"}'), "<TTS>Hello!</TTS>")
 
     def test_rejects_extra_fields_missing_field_and_invalid_values(self):
         for payload in [
@@ -63,13 +63,13 @@ class TestAnswerRefiner(unittest.TestCase):
                 self.invoke(json.dumps(payload))
 
     def test_rejects_prose_fences_trailing_text_and_partial_json(self):
-        for payload in ['Hello!', '```json\n{"final_answer":"Hi"}\n```',
+        for payload in ['<TTS>Hello!</TTS>', '```json\n{"final_answer":"Hi"}\n```',
                         '{"final_answer":"Hi"} Explanation', '{"final_answer":"Hi"']:
             with self.subTest(payload=payload), self.assertRaises(InaccurateResponse):
                 self.invoke(payload)
 
     def test_does_not_filter_user_content_by_keywords(self):
-        answer = 'The document has a section titled "Reason for Refinement".'
+        answer = '<TTS>The document has a section titled "Reason for Refinement".</TTS>'
         self.assertEqual(self.invoke(json.dumps({"final_answer": answer})), answer)
 
     def test_provider_errors_are_not_replaced_with_a_fallback_answer(self):

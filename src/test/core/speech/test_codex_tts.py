@@ -88,7 +88,7 @@ class FallbackSpeechTests(unittest.TestCase):
 
     def test_startup_probes_once_and_uses_existing_fallback(self):
         self.primary.probe.side_effect = AgentError('Unavailable')
-        self.assertEqual(self.engine.initialize(), 'Codex voice unavailable; using Ollama.')
+        self.assertEqual(self.engine.initialize(), 'Primary voice unavailable; using Ollama.')
         self.engine.initialize()
         self.primary.probe.assert_called_once()
         self.factory.assert_called_once()

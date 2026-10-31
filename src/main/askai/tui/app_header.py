@@ -143,11 +143,15 @@ class HeaderNotifications(Widget):
     def __str__(self):
         device_info: str = f"{recorder.input_device[1]}" if recorder.input_device else "-"
         voice: str = shared.speech.tts.voice
+        from askai.core.askai_messages import msg
+        reason = getattr(shared.speech.tts, "failure_reason", None)
+        tts_details = ("\n" + msg.t("TTS fallback reason") + ": " + msg.t(reason)) if reason else ""
         # fmt: off
         return dedent(f"""\
             Assistive: {'' if self.assistive else ''}
             Debugging: {'' if self.debugging else ''}
             Listening: {'' if self.listening else ''}
+           TTS Engine: {getattr(shared.speech.tts, 'provider_name', configs.tts_engine)}{tts_details}
              Speaking: {'   ' + voice if self.speaking else ''}
               Caching: {'' if self.caching else ''}
                   RAG: {'' if self.rag else ''}
