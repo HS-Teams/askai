@@ -32,9 +32,13 @@ class AskAiMessages(metaclass=Singleton):
     TRANSLATOR: AITranslator = DeepLTranslator
 
     @staticmethod
-    @lru_cache
     def get_translator(from_lang: Language) -> AITranslator:
-        return AskAiMessages.TRANSLATOR(from_lang, configs.language)
+        return AskAiMessages._get_translator(from_lang, configs.language)
+
+    @staticmethod
+    @lru_cache
+    def _get_translator(from_lang: Language, target_lang: Language) -> AITranslator:
+        return AskAiMessages.TRANSLATOR(from_lang, target_lang)
 
     def __init__(self):
         # fmt: off
@@ -51,7 +55,6 @@ class AskAiMessages(metaclass=Singleton):
     def translator(self) -> AITranslator:
         return AskAiMessages.get_translator(Language.EN_US)
 
-    @lru_cache(maxsize=256)
     def translate(self, text: AnyStr) -> str:
         """Translate text using the configured language.
         :param text: The text to be translated.
@@ -60,7 +63,11 @@ class AskAiMessages(metaclass=Singleton):
         # Avoid translating debug messages.
         if re.match(r"^~~\[DEBUG]~~", str(text), flags=re.IGNORECASE | re.DOTALL | re.MULTILINE):
             return text
-        return self.translator.translate(str(text))
+        return self._translate(str(text), configs.language)
+
+    @lru_cache(maxsize=256)
+    def _translate(self, text: str, target_lang: Language) -> str:
+        return self._get_translator(Language.EN_US, target_lang).translate(text)
 
     def t(self, text: AnyStr) -> str:
         """Wrapper to translate.
