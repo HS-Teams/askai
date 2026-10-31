@@ -16,9 +16,6 @@ from askai.core.askai_configs import AskAiConfigs
 from askai.core.engine.ai_model import AIModel
 from askai.core.engine.ai_vision import AIVision
 from askai.core.model.ai_reply import AIReply
-from langchain_core.embeddings import Embeddings
-from langchain_core.language_models import BaseChatModel, BaseLLM
-from pathlib import Path
 from typing import Optional, Protocol
 
 
@@ -41,37 +38,22 @@ class AIEngine(Protocol):
         """
         ...
 
-    def voices(self) -> list[str]:
-        """Return the available model voices for speech to text.
-        :return: A list of available voices.
-        """
-
     def vision(self) -> AIVision:
         """Return the engine's vision component.
         :return: The vision component of the engine.
         """
         ...
 
-    def lc_model(self, temperature: float, top_p: float) -> BaseLLM:
-        """Create a LangChain LLM model instance using the current AI engine.
-        :param temperature: The LLM model temperature.
-        :param top_p: The model engine top_p.
-        :return: An instance of BaseLLM.
-        """
+    def complete(self, messages: list[dict], temperature: float = 0.0, schema: dict | None = None) -> str:
+        """Generate text, optionally constrained by a JSON schema; propagate provider errors."""
         ...
 
-    def lc_chat_model(self, temperature: float = 0.0) -> BaseChatModel:
-        """Create a LangChain LLM chat model instance using the current AI engine.
-        :param temperature: The LLM chat model temperature.
-        :return: An instance of BaseChatModel.
-        """
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Embed text in this provider's declared embedding space."""
         ...
 
-    def lc_embeddings(self, model: str) -> Embeddings:
-        """Create a LangChain LLM embeddings model instance.
-        :param model: The LLM embeddings model string.
-        :return: An instance of BaseEmbeddingsModel.
-        """
+    def embedding_key(self) -> str:
+        """Identify the embedding space used by persisted vector stores."""
         ...
 
     def ai_name(self) -> str:
@@ -98,22 +80,6 @@ class AIEngine(Protocol):
         :param temperature: The model engine temperature.
         :param top_p: The model engine top_p.
         :return: The AI's reply.
-        """
-        ...
-
-    def text_to_speech(self, text: str, prefix: str = "", stream: bool = True, playback: bool = True) -> Optional[Path]:
-        """Convert the provided text to speech.
-        :param text: The text to convert to speech.
-        :param prefix: The prefix of the streamed text.
-        :param stream: Whether to stream the text into stdout.
-        :param playback: Whether to play back the generated audio file.
-        :return: The path to the generated audio file; or None if no file was generated.
-        """
-        ...
-
-    def speech_to_text(self) -> Optional[str]:
-        """Transcribe audio input from the microphone into text.
-        :return: The transcribed text or None if transcription fails.
         """
         ...
 

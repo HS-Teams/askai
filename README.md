@@ -36,7 +36,7 @@ Furthermore, AskAI embraces diversity by breaking language barriers, ensuring th
 
 ## Key Features
 
-- Seamlessly Integrate AI Models (Currently Supporting OpenAI).
+- Integrate OpenAI models and local Llama models through Ollama.
 - Activate Speech-to-Text Inputs via Push-to-Talk Keybinding.
 - Control Text-to-Speech Outputs with Adjustable Speed.
 - Enable Assistive Technology for Visually Impaired Terminal Usage.
@@ -179,3 +179,110 @@ Thank you <3 !!
 - Mailto: [HomeSetup](mailto:homesetup@gmail.com)
 
 Enjoy!
+
+## Local Llama with Ollama
+
+Install the Python dependencies through the project build. AskAI communicates with
+Ollama through its native HTTP endpoints. Start Ollama and install the models you intend to use:
+
+```bash
+ollama serve
+# In another terminal:
+ollama pull llama3.1
+ollama pull phonon
+# Required for RAG and validator retrieval:
+ollama pull nomic-embed-text
+
+PYTHONPATH=src/main python3 -m askai -e llama -m llama3.1 -r chat -i -s
+```
+
+The Llama engine uses the local service without an OpenAI API key. It supports
+chat, task splitting, embeddings and image captions when the selected model
+supports vision. Phonon supplies speech output; microphone transcription retains
+AskAI's existing recorder/transcriber (Google recognition by default).
+
+Speech is exposed through `AIEngine.speech() -> AISpeech`. Every provider implements
+`model_name`, `voice`, `voices()`, `select_voice()` and `synthesize()`. The voice
+commands depend only on this contract. A synthesis voice override previews a
+voice without changing the saved selection:
+
+```text
+/voices list
+/voices set "Grub the Ogre"
+/voices play "Grub the Ogre"
+/voices play 0
+```
+
+Indices are zero-based. Voice selection is saved per provider. OpenAI and Ollama
+both generate previews using their speech provider; there is no provider-specific
+sample-file lookup in the commands. Quoted and unquoted multiword voice names are
+accepted. Standalone usage is also supported:
+
+```bash
+PYTHONPATH=src/main python3 -m askai -e llama '/voices list'
+```
+
+| Environment variable | Default |
+| --- | --- |
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` |
+| `ASKAI_LLAMA_MODEL` | `llama3.1` |
+| `ASKAI_LLAMA_EMBEDDING_MODEL` | `nomic-embed-text` |
+| `ASKAI_LLAMA_CONTEXT_LENGTH` | `4096` |
+| `ASKAI_LLAMA_TIMEOUT` | `120` seconds |
+| `ASKAI_LLAMA_TTS_MODEL` | `phonon` |
+
+Chat model selection uses `-m`, then `askai.<engine>.default.model`, then the
+engine's built-in default (`gpt-4o-mini` for OpenAI, `llama3.1` for Ollama;
+`ASKAI_LLAMA_MODEL` can override the latter). Starting a session saves the selected
+model for that engine. Switching engines preserves each engine's selection.
+The old global `askai.default.engine.model` setting is no longer read. The default speech voice is
+`Grub the Ogre`; `/voices list` queries the installed speech model's catalogue.
+Phonon runs through the Ollama CLI with redirected WAV output, then uses AskAI's
+existing audio player and playback speed. The CLI handles long input, and failed
+synthesis is not cached. Ollama speech requires a compatible Ollama/Phonon runtime;
+see the [Ollama speech guide](https://docs.ollama.com/capabilities/speech).
+
+Persisted RAG indexes now include the embedding provider/model identity. Existing
+indexes are retained, and a new index is built on first use. Chat and speech have
+no automatic fallback to another provider. Restart AskAI after installing the new
+Python dependency or changing environment configuration.
+
+
+### Taius orchestration and Codex
+
+The interactive `taius` routing mode replaces the task splitter. AskAI retains its
+STM, document RAG, validator and refiner. Every question in this mode goes to
+Codex, including conversation. There is no local-model routing decision or function-call
+splitter. The flow is text (or STT) -> Codex -> validation -> refiner -> text,
+with TTS only when `/speak` is on. Configured RAG supplies context when indexed
+documents exist. Validation failure never automatically replays an executed task.
+
+```bash
+codex login
+ollama pull llama3.1
+ollama pull nomic-embed-text
+askai -e llama -r taius
+```
+
+Use `askai --help` for invocation options; `/mode taius` selects orchestration in
+an existing session. The inference engine and specialized agent are separate:
+`-e llama` handles validation, refinement and local capabilities; Codex processes every question using its existing
+ChatGPT account via `codex app-server`, without an OpenAI API key. The existing
+OpenAI engine remains available during migration and still requires its own key.
+
+The new agent and orchestration core has no CLI/TUI imports. CLI and Textual
+adapters handle requests for per-action approval or user answers. Codex runs in
+the launch working directory with `workspace-write` sandboxing and `on-request`
+approvals; actions within that sandbox may run without a further prompt. Additional
+permission-profile grants are currently denied explicitly. Unknown interaction
+methods fail explicitly. Ctrl+C (CLI) or Stop (TUI) requests cancellation; completed
+side effects are not rolled back. No task is retried or switched to another agent
+silently.
+
+The adapter was exercised against Codex CLI 0.162.1. It uses structured final-answer
+items, not keyword filtering. Specialist sessions resume within the running AskAI
+process and directory; persistence of those session references across application
+restarts is pending. The old function-call executor and framework dependencies
+have been removed. Existing document indexes are left intact; native retrieval
+uses a separate index namespace and rebuilds from source documents on first use.
+Audio caching and voice selection remain unchanged.

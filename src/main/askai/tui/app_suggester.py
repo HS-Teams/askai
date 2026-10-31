@@ -12,7 +12,7 @@
 
    Copyright (c) 2024, AskAI
 """
-from askai.core.commander.commander import commands
+from askai.core.commander.commander import command_suggestions
 from askai.core.component.cache_service import cache
 from clitt.core.tui.line_input.keyboard_input import KeyboardInput
 from textual.suggester import Suggester
@@ -24,7 +24,7 @@ class InputSuggester(Suggester):
 
     def __init__(self, *, case_sensitive: bool = True) -> None:
         super().__init__(use_cache=False, case_sensitive=case_sensitive)
-        KeyboardInput.preload_history(cache.load_input_history(commands()))
+        KeyboardInput.preload_history(cache.load_input_history(command_suggestions()))
         self._suggestions: list[str] = KeyboardInput.history()
         self._for_comparison: list[str] = list(
             self._suggestions if self.case_sensitive else [suggestion.casefold() for suggestion in self._suggestions]

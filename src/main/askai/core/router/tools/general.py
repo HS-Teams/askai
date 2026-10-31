@@ -13,12 +13,10 @@
    Copyright (c) 2024, AskAI
 """
 from askai.core.askai_prompt import prompt
+from askai.core.support.inference import complete
 from askai.core.engine.openai.temperature import Temperature
-from askai.core.support.langchain_support import lc_llm
 from askai.core.support.shared_instances import shared
 from hspylib.core.config.path_object import PathObject
-from langchain_core.messages import AIMessage
-from langchain_core.prompts import PromptTemplate
 
 import os
 
@@ -39,18 +37,11 @@ def final_answer(persona_prompt: str | None = None, input_variables: list[str] |
     :param prompt_args: The prompt input arguments.
     """
     prompt_file: PathObject = PathObject.of(prompt.append_path(f"taius/{persona_prompt}"))
-    # fmt: off
-    template = PromptTemplate(
-        input_variables=input_variables or [],
-        template=prompt.read_prompt(prompt_file.filename, prompt_file.abs_dir)
-    )
-    # fmt: on
-    final_prompt = template.format(**prompt_args)
-    llm = lc_llm.create_chat_model(temperature=Temperature.COLDEST.temp)
-    response: AIMessage = llm.invoke(final_prompt)
+    final_prompt = prompt.read_prompt(prompt_file.filename, prompt_file.abs_dir).format(**prompt_args)
+    response = complete(final_prompt, Temperature.COLDEST.temp)
     output: str | None = None
 
-    if not response or not (output := response.content) or shared.UNCERTAIN_ID in response.content:
+    if not response or not (output := response) or shared.UNCERTAIN_ID in response:
         output = "Sorry, I was not able to provide a helpful response."
 
     return output or "Sorry, the query produced no response!"

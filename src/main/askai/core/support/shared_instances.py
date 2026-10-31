@@ -12,7 +12,7 @@
 
 Copyright (c) 2024, AskAI
 """
-from langchain_classic.memory import ConversationBufferWindowMemory
+from askai.core.support.short_term_memory import ShortTermMemory
 
 from askai.__classpath__ import classpath
 from askai.core.askai_configs import configs
@@ -48,12 +48,25 @@ class SharedInstances(metaclass=Singleton):
     UNCERTAIN_ID: str = "bde6f44d-c1a0-4b0c-bd74-8278e468e50c"
 
     def __init__(self) -> None:
+        self._speech = None
         self._context: ChatContext | None = None
         self._engine: AIEngine | None = None
         self._mode: Any | None = None
-        self._memory: ConversationBufferWindowMemory | None = None
+        self._memory: ShortTermMemory | None = None
         self._idiom: str = configs.language.idiom
         self._max_iteractions: int = configs.max_iteractions
+
+    @property
+    def speech(self):
+        from askai.core.speech.service import SpeechService
+        if self._speech is None:
+            self._speech = SpeechService(configs.stt_engine, configs.tts_engine)
+        return self._speech
+
+    def listen(self):
+        self.speech.cancel_output()
+        _, text = recorder.listen(language=configs.stt_language)
+        return text.strip() if text else None
 
     @property
     def context(self) -> Optional[ChatContext]:
@@ -105,7 +118,7 @@ class SharedInstances(metaclass=Singleton):
         return self._idiom
 
     @property
-    def memory(self) -> ConversationBufferWindowMemory:
+    def memory(self) -> ShortTermMemory:
         return self.create_memory()
 
     @property
@@ -117,7 +130,7 @@ class SharedInstances(metaclass=Singleton):
         device_info = f"{recorder.input_device[1]}" if recorder.input_device else ""
         device_info += f", %YELLOW%AUTO-SWAP {'%GREEN%' if recorder.is_auto_swap else '%RED%'}"
         dtm = f" {geo_location.datetime} "
-        speak_info = str(configs.tempo) + " @" + self.engine.configs().tts_voice
+        speak_info = str(configs.tempo) + " @" + self.speech.tts.voice
         cur_dir = elide_text(str(Path(os.getcwd()).absolute()), 67, "…")
         translator = f"translated by '{msg.translator.name()}'" if configs.language.name.title() != "English" else ""
         eng: AIEngine = shared.engine
@@ -174,20 +187,27 @@ class SharedInstances(metaclass=Singleton):
                     ctx.append(ContextEntry(role, content))
         return self._context
 
-    def create_memory(self, memory_key: str = "chat_history") -> ConversationBufferWindowMemory:
+    def create_memory(self, memory_key: str = "chat_history") -> ShortTermMemory:
         """Create or retrieve the conversation window memory.
         :param memory_key: The key used to identify the memory (default is "chat_history").
         :return: An instance of BaseChatMemory associated with the specified memory key.
         """
         if self._memory is None:
-            self._memory = ConversationBufferWindowMemory(
-                memory_key=memory_key, k=configs.max_short_memory_size, return_messages=True
-            )
+            self._memory = ShortTermMemory(configs.max_short_memory_size)
             if configs.is_keep_context:
                 entries: list[str] = cache.read_memory()
                 for role, content in zip(entries[::2], entries[1::2]):
-                    self._memory.chat_memory.add_message(self.context.LANGCHAIN_ROLE_MAP[role](content))
+                    self._memory.add(role, content)
         return self._memory
+
+    def close(self):
+        from askai.core.processors.taius import taius
+
+        taius.cancel()
+        if self._speech is not None:
+            self._speech.close()
+        if self._engine is not None:
+            self._engine.backend.close()
 
     def input_text(self, input_prompt: str, placeholder: str | None = None) -> Optional[str]:
         """Prompt the user for input.
@@ -199,7 +219,7 @@ class SharedInstances(metaclass=Singleton):
         while ret is None:
             if (ret := line_input(input_prompt, placeholder)) == Keyboard.VK_CTRL_L:  # Use voice input.
                 terminal.cursor.erase_line()
-                if spoken_text := self.engine.speech_to_text():
+                if spoken_text := self.listen():
                     display_text(f"{self.username}: {spoken_text}")
                 ret = spoken_text
             elif ret == Keyboard.VK_CTRL_D:

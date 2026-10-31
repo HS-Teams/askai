@@ -56,6 +56,8 @@ class AskAiSettings(metaclass=Singleton):
         self._settings = Settings(self._configs)
         if not self._settings.count() or self.get("askai.settings.version.id") != self.__ACTUAL_VERSION:
             self.defaults()
+        if self.get("askai.session.compact.on.exit", None) is None:
+            self.put("askai.session.compact.on.exit", True)
 
     def __str__(self) -> str:
         return self.search()
@@ -101,12 +103,15 @@ class AskAiSettings(metaclass=Singleton):
         self._settings.put("askai.cache.enabled", "askai", False)
         self._settings.put("askai.cache.ttl.minutes", "askai", 25)
         self._settings.put("askai.context.keep.conversation", "askai", False)
+        self._settings.put("askai.session.compact.on.exit", "askai", True)
         self._settings.put("askai.preferred.language", "askai", "")
-        self._settings.put("askai.router.mode.default", "askai", "splitter")
+        self._settings.put("askai.router.mode.default", "askai", "taius")
         self._settings.put("askai.router.pass.threshold", "askai", "moderate")
         self._settings.put("askai.router.assistive.enabled", "askai", False)
-        self._settings.put("askai.default.engine", "askai", "openai")
-        self._settings.put("askai.default.engine.model", "askai", "gpt-4o-mini")
+        self._settings.put("askai.default.engine", "askai", "codex")
+        self._settings.put("askai.agent.default", "askai", "codex")
+        self._settings.put("askai.codex.default.model", "askai", "gpt-6.1-sol")
+        self._settings.put("askai.openai.default.model", "askai", "gpt-4o-mini")
         self._settings.put("askai.verbosity.level", "askai", 3)
         self._settings.put("askai.text.to.speech.tempo", "askai", 1)
         self._settings.put("askai.text.splitter.chunk.size", "askai", 1000)
@@ -122,8 +127,10 @@ class AskAiSettings(metaclass=Singleton):
         self._settings.put("askai.max.agent.execution.time.seconds", "askai", 45)
         # Recorder
         self._settings.put("askai.recorder.devices", "askai", "")
-        self._settings.put("askai.recorder.silence.timeout.millis", "askai", 1200)
+        self._settings.put("askai.recorder.silence.timeout.millis", "askai", 1700)
+        self._settings.put("askai.recorder.end.silence.millis", "askai", 2000)
         self._settings.put("askai.recorder.phrase.limit.millis", "askai", 10000)
+        self._settings.put("askai.recorder.tail.margin.millis", "askai", 1500)
         self._settings.put("askai.recorder.noise.detection.duration.millis", "askai", 600)
         self._settings.put("askai.recorder.input.device.auto.swap", "askai", True)
         # Camera

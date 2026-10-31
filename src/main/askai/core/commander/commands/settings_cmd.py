@@ -36,7 +36,7 @@ class SettingsCmd(ABC):
         display_text(f"> Hint: Type: '/settings set \\<number|settings_name\\> \\<value\\>' to set.")
 
     @staticmethod
-    def set(name: str, value: Any) -> None:
+    def set(name: str, value: Any, *, announce: bool = True) -> None:
         """Set a setting value.
         :param name: The name of the setting to update or create.
         :param value: The value to assign to the setting.
@@ -46,7 +46,8 @@ class SettingsCmd(ABC):
             name = all_settings[int(name)].name
         if settings[name]:
             settings.put(name, value if value not in ["''", '""'] else None)
-            text_formatter.commander_print(f"Setting `{name}` changed to %GREEN%{value}%NC%")
+            if announce:
+                text_formatter.commander_print(f"Setting `{name}` changed to %GREEN%{value}%NC%")
         else:
             text_formatter.commander_print(f"%RED%Setting: '{name}' was not found!%NC%")
 

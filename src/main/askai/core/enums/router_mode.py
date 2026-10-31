@@ -19,7 +19,7 @@ from askai.core.processors.chat import chat
 from askai.core.processors.qna import qna
 from askai.core.processors.qstring import qstring
 from askai.core.processors.rag import rag
-from askai.core.processors.task_splitter import splitter
+from askai.core.processors.taius import taius
 from functools import lru_cache
 from hspylib.core.enums.enumeration import Enumeration
 from hspylib.core.tools.dict_tools import get_or_default_by_key
@@ -35,7 +35,7 @@ class RouterMode(Enumeration):
 
     # fmt: off
 
-    SPLITTER    = "Task Splitter",                  "", splitter
+    TAIUS       = "Taius Orchestrator",             "", taius
 
     QNA         = "Questions & Answers",            "", qna
 
@@ -60,7 +60,7 @@ class RouterMode(Enumeration):
         """Return the default routing mode.
         :return: The default RouterMode instance.
         """
-        return RouterMode.SPLITTER if configs.is_interactive else RouterMode.QSTRING
+        return RouterMode.TAIUS
 
     @classmethod
     def of_name(cls, name: str) -> "RouterMode":

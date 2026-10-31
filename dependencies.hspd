@@ -24,12 +24,8 @@ package: transitions, version: 0.9.3, mode: ge
 package: pydantic, version: 2.12.4, mode: ge
 package: cryptography, version: 46.0.3, mode: ge
 
-/* LangChain */
-package: langchain, version: 1.1.0, mode: eq
-package: langchain-openai, version: 1.1.0, mode: eq
-package: langchain-community, version: 0.4.1, mode: eq
-package: langchain-google-community, version: 3.0.1, mode: eq
-package: langchain_classic, version: 1.0.0, mode: eq
+
+/* Ollama */
 
 /* OpenAI */
 package: openai-whisper, version: 20250625, mode: eq
@@ -84,3 +80,6 @@ package: chromadb, version: 1.3.5, mode: compat
 /* Translations */
 package: deepl, version: 1.25.0, mode: eq
 package: argostranslate, version: 1.10.0, mode: eq
+
+package: mcp, version: 1.30.0, mode: eq
+package: psutil, version: 7.2.2, mode: eq

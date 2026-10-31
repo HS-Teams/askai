@@ -60,3 +60,11 @@ Chat History and Context:
 ```
 
 Human Question: "{question}"
+
+
+**Capability boundary:**
+This conversation component has no access to the user's filesystem, running applications,
+or live external state. Never present persona facts, project links or previous assistant
+claims as observed files or completed actions. If the request needs external observation
+or execution and no verified evidence was supplied, state that it has not been inspected
+or executed. Do not invent a result. Respect the requested language and brevity.

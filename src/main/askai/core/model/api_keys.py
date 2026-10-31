@@ -36,7 +36,7 @@ class ApiKeys(BaseSettings):
     """
 
     # fmt: off
-    OPENAI_API_KEY: str = Field(..., description="Open AI Api Key")
+    OPENAI_API_KEY: Optional[str] = Field(None, description="Open AI Api Key")
     GOOGLE_API_KEY: Optional[str] = Field(None, description="Google Api Key")
     DEEPL_API_KEY: Optional[str]  = Field(None, description="DeepL Api Key")
     # fmt: on

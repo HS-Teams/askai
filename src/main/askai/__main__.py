@@ -14,6 +14,7 @@ Copyright (c) 2024, AskAI
 """
 
 from askai.__classpath__ import classpath
+from askai.core.commander.command_args import command_args
 from askai.core.support.utilities import QueryString
 from clitt.core.tui.tui_application import TUIApplication
 from hspylib.core.enums.charset import Charset
@@ -57,12 +58,12 @@ class Main(TUIApplication):
 
         try:
             if command := re.search(commander.RE_ASKAI_CMD, str(command_str)):
-                args: list[str] = list(
-                    filter(lambda a: a and a != "None", re.split(r"\s", f"{command.group(1)} {command.group(2)}"))
-                )
+                args = command_args(command)
                 commander.ask_commander(args, standalone_mode=False)
             # If no exception is raised, the command executed successfully
             return ExitStatus.SUCCESS
+        except ValueError as error:
+            syserr(str(error))
         except click.ClickException as ce:
             ce.show()
             syserr("Command failed due to a ClickException.")
@@ -112,18 +113,12 @@ class Main(TUIApplication):
                 nargs="?")\
             .option(
                 "engine", "e", "engine",
-                "Set which AI engine to use (if not provided, the default engine wil be used).",
-                choices=["openai", "gemini", "llama"],
+                "Select the agent: Codex, Claude or Cursor (case-insensitive).",
                 nargs="?")\
             .option(
                 "model", "m", "model",
-                "Set which AI-Engine model to use (depends on the engine).",
-                nargs="?") \
-            .option(
-                "router", "r", "router",
-                "Set which router mode to use.",
-                nargs="?",
-                choices=["rag", "chat", "splitter"])
+                "Select a model supported by the chosen agent CLI.",
+                nargs="?")
         self._with_arguments() \
             .argument(
                 "query_string", "What to ask the AI engine",
@@ -145,6 +140,15 @@ class Main(TUIApplication):
         is_new_ui: bool = to_bool(self._get_argument("ui", False))
         query_string: str | None = self._get_query_string()
         configs.is_interactive = self._get_interactive(query_string)
+        from askai.core.agents.factory import normalize_agent, create_backend
+        from askai.core.agents.contracts import AgentError
+        try:
+            engine_name = normalize_agent(self._get_argument("engine", configs.agent))
+            create_backend(engine_name)
+        except AgentError as error:
+            syserr(str(error))
+            return ExitStatus.FAILED
+        model_name = self._get_argument("model", configs.model_for(engine_name))
         if is_new_ui:
             from askai.core.enums.router_mode import RouterMode
             from askai.tui import askai_app
@@ -152,13 +156,13 @@ class Main(TUIApplication):
             configs.is_interactive = True  # TUI is always interactive
             os.environ["ASKAI_APP"] = RunModes.ASKAI_TUI.value
             self._askai = askai_app.AskAiApp(
-                to_bool(self._get_argument("speak")),
-                to_bool(self._get_argument("debug")),
+                to_bool(self._get_argument("speak")) or configs.is_speak,
+                to_bool(self._get_argument("debug")) or configs.is_debug,
                 to_bool(self._get_argument("cache", configs.is_cache)),
                 int(self._get_argument("tempo", configs.tempo)),
-                self._get_argument("engine", configs.engine),
-                self._get_argument("model", configs.model),
-                RouterMode.of_name(self._get_mode_str()),
+                engine_name,
+                model_name,
+                RouterMode.TAIUS,
             )
         elif configs.is_interactive or (query_string and not query_string.startswith("/")):
             from askai.core import askai_cli
@@ -166,18 +170,22 @@ class Main(TUIApplication):
 
             os.environ["ASKAI_APP"] = RunModes.ASKAI_CLI.value
             self._askai = askai_cli.AskAiCli(
-                to_bool(self._get_argument("speak")),
-                to_bool(self._get_argument("debug")),
+                to_bool(self._get_argument("speak")) or configs.is_speak,
+                to_bool(self._get_argument("debug")) or configs.is_debug,
                 to_bool(self._get_argument("cache", configs.is_cache)),
                 int(self._get_argument("tempo", configs.tempo)),
                 self._get_argument("prompt"),
-                self._get_argument("engine", configs.engine),
-                self._get_argument("model", configs.model),
+                engine_name,
+                model_name,
                 query_string,
-                RouterMode.of_name(self._get_mode_str()),
+                RouterMode.TAIUS,
             )
         else:
             os.environ["ASKAI_APP"] = RunModes.ASKAI_CMD.value
+            if query_string and re.match(r"^/voices(?:\s|$)", query_string):
+                from askai.core.support.shared_instances import shared
+
+                shared.create_engine(engine_name, model_name, None)
             return self._execute_command(query_string or "/help")
 
         # fmt: off
@@ -195,10 +203,17 @@ class Main(TUIApplication):
         """Execute the application main flow.
         :return: The exit status of the application.
         """
-        self._askai.run()
         from askai.core.support import shared_instances
 
-        shared_instances.shared.context.save()
+        try:
+            self._askai.run()
+            shared_instances.shared.context.save()
+            shared_instances.shared.speech.wait_output()
+            from askai.core.processors.taius import taius
+
+            taius.compact_on_exit()
+        finally:
+            shared_instances.shared.close()
 
         return ExitStatus.SUCCESS
 
@@ -227,12 +242,6 @@ class Main(TUIApplication):
         """
         query_string: QueryString = self._get_argument("query_string")
         return " ".join(query_string) if isinstance(query_string, list) else query_string
-
-    def _get_mode_str(self) -> str:
-        """Return the router mode according to the specified arguments or from configs.
-        :return: The router mode as a string.
-        """
-        return self._get_argument("router", "default")
 
     def _get_interactive(self, query_string: str | None) -> bool:
         """Return the interactive parameter if query_string is not specified; False otherwise.

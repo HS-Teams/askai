@@ -17,16 +17,11 @@ from typing import Optional
 from askai.__classpath__ import classpath
 from askai.core.askai_configs import configs
 from askai.core.askai_settings import ASKAI_DIR
-from askai.core.support.langchain_support import lc_llm
 from hspylib.core.config.path_object import PathObject
 from hspylib.core.metaclass.classpath import AnyPath
 from hspylib.core.preconditions import check_state
 from hspylib.core.tools.commons import dirname, file_is_not_empty, safe_delete_file
 from hspylib.core.tools.text_tools import ensure_endswith, hash_text
-from langchain_community.document_loaders import CSVLoader
-from langchain_community.vectorstores import FAISS
-from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStore
 from pathlib import Path
 
 import glob
@@ -37,6 +32,9 @@ import shutil
 RAG_EXT_DIR: Path = Path(f"{ASKAI_DIR}/rag")
 if not RAG_EXT_DIR.exists():
     RAG_EXT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+from askai.core.component.retrieval import Document, VectorIndex, load_csv
 
 
 class RAGProvider:
@@ -131,8 +129,8 @@ class RAGProvider:
     def __init__(self, rag_filepath: str):
         self._rag_db = None
         self._rag_path: str = os.path.join(str(self.RAG_DIR), rag_filepath)
-        self._rag_docs: list[Document] = CSVLoader(file_path=self._rag_path).load()
-        self._rag_db: VectorStore | None = None
+        self._rag_docs: list[Document] = load_csv(self._rag_path)
+        self._rag_db: VectorIndex | None = None
         check_state(file_is_not_empty(self._rag_path))
 
     def get_rag_examples(self, query: str, k: int = configs.rag_retrival_amount) -> Optional[str]:
@@ -143,8 +141,10 @@ class RAGProvider:
         """
         if configs.is_rag:
             if self._rag_db is None:
-                self._rag_db = FAISS.from_documents(self._rag_docs, lc_llm.create_embeddings())
-            example_docs: list[Document] = self._rag_db.similarity_search(query, k=k)
+                from askai.core.support.shared_instances import shared
+                self._rag_db = VectorIndex(shared.engine.embed)
+                self._rag_db.replace(self._rag_docs)
+            example_docs: list[Document] = self._rag_db.search(query, k=k)
             rag_examples: list[str] = [doc.page_content for doc in example_docs]
             return f'**Examples:**\n"""{(2 * os.linesep).join(rag_examples)}"""'
 

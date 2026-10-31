@@ -16,7 +16,6 @@ from askai.core.model.action_plan import ActionPlan
 from askai.core.model.model_result import ModelResult
 from fixtures.action_plan_stubs import stub_response
 from hspylib.core.tools.commons import dirname
-from langchain_core.messages import AIMessage
 from pathlib import Path
 
 import sys

@@ -8,7 +8,8 @@
 __all__ = [
     'openai_configs', 
     'openai_engine', 
-    'openai_model', 
+    'openai_model',
+    'openai_speech',
     'openai_vision', 
     'temperature'
 ]

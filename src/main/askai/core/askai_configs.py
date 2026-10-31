@@ -34,6 +34,31 @@ class AskAiConfigs(metaclass=Singleton):
         self._recorder_devices: set[str] = set(map(str.strip, settings.get_list("askai.recorder.devices")))
 
     @property
+    def stt_engine(self) -> str:
+        return os.getenv("ASKAI_STT_ENGINE") or settings.get("askai.speech.stt.engine") or "google"
+
+    @property
+    def stt_language(self) -> Language:
+        value = os.getenv("ASKAI_STT_LANGUAGE") or settings.get("askai.speech.stt.language")
+        return Language.of_locale(value) if value else self.language
+
+    @property
+    def tts_engine(self) -> str:
+        return os.getenv("ASKAI_TTS_ENGINE") or settings.get("askai.speech.tts.engine") or "auto"
+
+    @property
+    def compact_on_exit(self) -> bool:
+        return settings.get_bool("askai.session.compact.on.exit", True)
+
+    @property
+    def agent(self) -> str:
+        return settings.get("askai.agent.default").strip() or "codex"
+
+    @agent.setter
+    def agent(self, value: str) -> None:
+        settings.put("askai.agent.default", value)
+
+    @property
     def engine(self) -> str:
         return settings.get("askai.default.engine")
 
@@ -42,12 +67,16 @@ class AskAiConfigs(metaclass=Singleton):
         settings.put("askai.default.engine", value)
 
     @property
-    def model(self) -> str:
-        return settings.get("askai.default.engine.model")
+    def model(self) -> str | None:
+        return self.model_for(self.engine)
 
     @model.setter
     def model(self, value: str) -> None:
-        settings.put("askai.default.engine.model", value)
+        settings.put(f"askai.{self.engine}.default.model", value)
+
+    def model_for(self, engine: str) -> str | None:
+        """Return this engine's saved model, or let its factory choose the default."""
+        return settings.get(f"askai.{engine}.default.model").strip() or None
 
     @property
     def is_interactive(self) -> bool:
@@ -219,6 +248,16 @@ class AskAiConfigs(metaclass=Singleton):
     @property
     def recorder_phrase_limit_millis(self) -> int:
         return settings.get_int("askai.recorder.phrase.limit.millis")
+
+    @property
+    def recorder_tail_margin_millis(self) -> int:
+        value = settings.get("askai.recorder.tail.margin.millis")
+        return int(value) if value else 1500
+
+    @property
+    def recorder_end_silence_millis(self) -> int:
+        value = settings.get("askai.recorder.end.silence.millis")
+        return int(value) if value else 2000
 
     @property
     def recorder_silence_timeout_millis(self) -> int:

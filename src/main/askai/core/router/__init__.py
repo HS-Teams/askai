@@ -6,10 +6,8 @@
 """Package initialization."""
 
 __all__ = [
-    'agent_tools', 
     'evaluation', 
     'model_selector', 
-    'task_agent', 
     'tools'
 ]
 __version__ = '1.2.19'

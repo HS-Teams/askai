@@ -18,8 +18,6 @@ from askai.exception.exceptions import TokenLengthExceeded
 from collections import defaultdict, deque, namedtuple
 from functools import partial, reduce
 from hspylib.core.preconditions import check_argument
-from langchain_community.chat_message_histories.in_memory import ChatMessageHistory
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from typing import Any, AnyStr, get_args, Literal, Optional, TypeAlias
 
 import os
@@ -28,7 +26,7 @@ ChatRoles: TypeAlias = Literal["system", "human", "assistant"]
 
 ContextRaw: TypeAlias = list[dict[str, str]]
 
-LangChainContext: TypeAlias = list[tuple[str, str]]
+ChatEntries: TypeAlias = list[tuple[str, str]]
 
 ContextEntry = namedtuple("ContextEntry", ["role", "content"])
 
@@ -36,7 +34,6 @@ ContextEntry = namedtuple("ContextEntry", ["role", "content"])
 class ChatContext:
     """Provide a chat context helper for AI engines."""
 
-    LANGCHAIN_ROLE_MAP: dict = {"human": HumanMessage, "system": SystemMessage, "assistant": AIMessage}
 
     def __init__(self, token_limit: int, max_context_size: int):
         self._store: dict[AnyStr, deque] = defaultdict(partial(deque, maxlen=max_context_size))
@@ -126,12 +123,12 @@ class ChatContext:
         ctx = self.store[key]
         return reduce(lambda total, e: total + len(e.content), ctx, 0) if len(ctx) > 0 else 0
 
-    def join(self, *keys: str) -> LangChainContext:
+    def join(self, *keys: str) -> ChatEntries:
         """Join multiple contexts identified by the specified keys.
         :param keys: The identifiers for the contexts to join.
         :return: The combined chat context.
         """
-        context: LangChainContext = []
+        context: ChatEntries = []
         token_length = 0
         for key in keys:
             ctx: ContextRaw = self.get(key)
@@ -143,17 +140,13 @@ class ChatContext:
                 list(map(context.append, [(t["role"], t["content"]) for t in ctx]))
         return context
 
-    def flat(self, *keys: str) -> ChatMessageHistory:
-        """Flatten multiple contexts identified by the specified keys into a single chat history.
-        :param keys: The identifiers for the contexts to flatten.
-        :return: The flattened chat message history.
-        """
-        history = ChatMessageHistory()
-        flatten: LangChainContext = self.join(*keys)
-        for ctx_entry in flatten:
-            mtype = self.LANGCHAIN_ROLE_MAP[ctx_entry[0]]
-            history.add_message(mtype(ctx_entry[1]))
-        return history
+    def flat(self, *keys: str) -> str:
+        """Render selected context for prompts without provider-specific message objects."""
+        return "\n".join(f"{role}: {content}" for role, content in self.join(*keys))
+
+    def messages(self, *keys: str) -> list[dict]:
+        return [{"role": "user" if role == "human" else role, "content": content}
+                for role, content in self.join(*keys)]
 
     def clear(self, *keys: str) -> int:
         """Clear all chat contexts specified by the provided keys.
@@ -185,6 +178,6 @@ class ChatContext:
 
     def save(self) -> None:
         """Save the current context window to the cache."""
-        ctx: LangChainContext = self.join(*self.store.keys())
+        ctx: ChatEntries = self.join(*self.store.keys())
         ctx_str: list[str] = [f"{role}: {msg}" for role, msg in ctx]
         cache.save_context(ctx_str)

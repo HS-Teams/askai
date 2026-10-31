@@ -12,10 +12,9 @@
 
    Copyright (c) 2024, AskAI
 """
-from askai.core.component.cache_service import cache
-from askai.core.component.multimedia.audio_player import player
 from askai.core.component.multimedia.recorder import Recorder
-from askai.core.component.text_streamer import streamer
+from askai.core.speech.contracts import TTSEngine
+from askai.core.engine.openai.openai_speech import OpenAISpeech
 from askai.core.engine.ai_model import AIModel
 from askai.core.engine.ai_vision import AIVision
 from askai.core.engine.openai.openai_configs import OpenAiConfigs
@@ -23,17 +22,11 @@ from askai.core.engine.openai.openai_model import OpenAIModel
 from askai.core.engine.openai.openai_vision import OpenAIVision
 from askai.core.model.ai_reply import AIReply
 from hspylib.core.preconditions import check_not_none
-from langchain_core.embeddings import Embeddings
-from langchain_core.language_models import BaseChatModel, BaseLLM
 from openai import APIError, OpenAI
-from pathlib import Path
-from threading import Thread
 from typing import List, Optional
 
-import langchain_openai
 import logging as log
 import os
-import pause
 import tiktoken
 
 
@@ -47,6 +40,7 @@ class OpenAIEngine:
         self._api_key: str = os.environ.get("OPENAI_API_KEY")
         self._client = OpenAI(api_key=self._api_key)
         self._vision = OpenAIVision()
+        self._speech = OpenAISpeech(self._client, self._configs)
 
     def __str__(self):
         return f"{self.ai_name()} '{self.nickname()}' '{self._model}'"
@@ -58,14 +52,6 @@ class OpenAIEngine:
     @property
     def client(self) -> OpenAI:
         return self._client
-
-    @property
-    def whisper_voices(self) -> list[str]:
-        return [
-            'alloy', 'echo', 'fable', 'onyx',
-            'nova', 'shimmer', 'coral', 'verse',
-            'ballad', 'ash', 'sage', 'marin', 'cedar'
-        ]
 
     def configs(self) -> OpenAiConfigs:
         """Return the engine-specific configurations."""
@@ -83,11 +69,8 @@ class OpenAIEngine:
         """
         return OpenAIModel.models()
 
-    def voices(self) -> list[str]:
-        """Return the available model voices for speech to text.
-        :return: A list of available voices.
-        """
-        return self.whisper_voices
+    def speech(self) -> TTSEngine:
+        return self._speech
 
     def vision(self) -> AIVision:
         """Return the engine's vision component.
@@ -95,32 +78,24 @@ class OpenAIEngine:
         """
         return self._vision
 
-    def lc_model(self, temperature: float, top_p: float) -> BaseLLM:
-        """Create a LangChain LLM model instance using the current AI engine.
-        :param temperature: The LLM model temperature.
-        :param top_p: The model engine top_p.
-        :return: An instance of BaseLLM.
-        """
-        return langchain_openai.OpenAI(
-            model=self._model.model_name(), temperature=temperature, top_p=top_p
-        )
+    def complete(self, messages: list[dict], temperature: float = 0.0, schema: dict | None = None) -> str:
+        options = {}
+        if schema is not None:
+            options["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "askai_response", "strict": True, "schema": schema}}
+        response = self.client.chat.completions.create(
+            model=self.ai_model_name(), messages=messages, temperature=temperature, **options)
+        content = response.choices[0].message.content
+        if content is None:
+            raise RuntimeError("The model returned no text response")
+        return content
 
-    def lc_chat_model(self, temperature: float) -> BaseChatModel:
-        """Create a LangChain LLM chat model instance using the current AI engine.
-        :param temperature: The LLM chat model temperature.
-        :return: An instance of BaseChatModel.
-        """
-        return langchain_openai.ChatOpenAI(
-            model=self._model.model_name(),
-            temperature=temperature
-        )
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        result = self.client.embeddings.create(model="text-embedding-3-small", input=texts)
+        return [item.embedding for item in sorted(result.data, key=lambda item: item.index)]
 
-    def lc_embeddings(self, model: str) -> Embeddings:
-        """Create a LangChain LLM embeddings model instance.
-        :param model: The LLM embeddings model string.
-        :return: An instance of Embeddings.
-        """
-        return langchain_openai.OpenAIEmbeddings(model=model)
+    def embedding_key(self) -> str:
+        return "openai:text-embedding-3-small"
 
     def ai_name(self) -> str:
         """Get the AI engine name.
@@ -153,49 +128,13 @@ class OpenAIEngine:
             response = self.client.chat.completions.create(
                 model=self.ai_model_name(), messages=chat_context, temperature=temperature, top_p=top_p
             )
-            reply = AIReply(response.choices[0].message.content, True)
+            reply = AIReply.info(response.choices[0].message.content)
             log.debug("Response received from LLM: %s", str(reply))
         except APIError as error:
             body: dict = error.body or {"message": "Message not provided"}
-            reply = AIReply(f"%RED%{error.__class__.__name__} => {body['message']}%NC%", False)
+            reply = AIReply.error(f"%RED%{error.__class__.__name__} => {body['message']}%NC%")
 
         return reply
-
-    def text_to_speech(self, text: str, prefix: str = "", stream: bool = True, playback: bool = True) -> Optional[Path]:
-        """Convert the provided text to speech.
-        :param text: The text to convert to speech.
-        :param prefix: The prefix of the streamed text.
-        :param stream: Whether to stream the text into stdout.
-        :param playback: Whether to play back the generated audio file.
-        :return: The path to the generated audio file; or None if no file was generated.
-        """
-        if text:
-            speech_file_path, file_exists = cache.audio_file_path(
-                text, self._configs.tts_voice, self._configs.tts_format
-            )
-            if not file_exists:
-                log.debug(f'Audio file "%s" not found in cache. Generating from %s.', self.nickname(), speech_file_path)
-                with self.client.audio.speech.with_streaming_response.create(
-                    input=text,
-                    model=self._configs.tts_model,
-                    voice=self._configs.tts_voice,
-                    response_format=self._configs.tts_format,
-                ) as response:
-                    response.stream_to_file(speech_file_path)
-                    log.debug(f"Audio file created: '%s' at %s", text, speech_file_path)
-            else:
-                log.debug(f"Audio file found in cache: '%s' at %s", text, speech_file_path)
-            if playback:
-                speak_thread = Thread(
-                    daemon=True, target=player.play_audio_file, args=(speech_file_path, self._configs.tempo)
-                )
-                speak_thread.start()
-                if stream:
-                    pause.seconds(player.start_delay())
-                    streamer.stream_text(text, prefix)
-                speak_thread.join()  # Block until the speech has finished.
-            return Path(speech_file_path)
-        return None
 
     def speech_to_text(self) -> Optional[str]:
         """Transcribe audio input from the microphone into text.

@@ -13,6 +13,7 @@
    Copyright (c) 2024, AskAI
 """
 from askai.__classpath__ import classpath
+from askai.core.commander.command_args import command_args
 from askai.core.askai_configs import configs
 from askai.core.askai_events import events
 from askai.core.askai_messages import msg
@@ -34,6 +35,7 @@ from hspylib.core.enums.charset import Charset
 from hspylib.core.tools.commons import file_is_not_empty, is_debugging
 from hspylib.core.zoned_datetime import DATE_FORMAT, now, TIME_FORMAT
 from hspylib.modules.application.exit_status import ExitStatus
+from pydantic import ValidationError
 from openai import RateLimitError
 from pathlib import Path
 from typing import Any, Optional
@@ -68,10 +70,13 @@ class AskAi:
         configs.is_speak = speak
         configs.is_cache = cacheable
         configs.tempo = tempo
-        configs.engine = engine_name
 
         self._session_id = now("%Y%m%d")[:8]
         self._engine: AIEngine = shared.create_engine(engine_name, model_name, mode)
+        configs.engine = engine_name
+        configs.agent = engine_name
+        if model_name:
+            configs.model = model_name
         self._context: ChatContext = shared.create_context(self._engine.ai_token_limit())
         self._mode: RouterMode = shared.mode
         self._console_path = Path(f"{CACHE_DIR}/askai-{self.session_id}.md")
@@ -127,11 +132,14 @@ class AskAi:
         :param frame: Current stack frame at the time of signal interruption.
         """
         log.warning(f"User interrupted: signals: {signals}  frame: {frame}")
+        shared.speech.cancel_output()
         self._abort_count += 1
         if self._abort_count > 1:
             events.reply.emit(reply=AIReply.error(f"\n{msg.terminate_requested('User aborted [ctrl+c]')}"))
             log.warning(f"User aborted. Exiting…")
             self._abort()
+        if hasattr(self.mode.processor, "cancel"):
+            self.mode.processor.cancel()
         events.abort.emit(message="User interrupted [ctrl+c]")
         threading.Timer(1, lambda: setattr(self, "_abort_count", 0)).start()
 
@@ -144,6 +152,7 @@ class AskAi:
         :param question: The question to ask the AI engine.
         :return: A tuple containing a boolean indicating success or failure, and the AI's reply as an optional string.
         """
+        shared.speech.cancel_output()
         status: bool = True
         output: str | None = None
         processor: AIProcessor = self.mode.processor
@@ -151,23 +160,24 @@ class AskAi:
 
         try:
             if command := re.search(RE_ASKAI_CMD, question):
-                args: list[str] = list(
-                    filter(lambda a: a and a != "None", re.split(r"\s", f"{command.group(1)} {command.group(2)}"))
-                )
+                try:
+                    args = command_args(command)
+                except ValueError as error:
+                    raise UsageError(str(error)) from error
                 ask_commander(args, standalone_mode=False)
                 return True, None
             shared.context.push("HISTORY", question)
-            if not (output := cache.read_reply(question)):
+            if not getattr(processor, "cacheable", True) or not (output := cache.read_reply(question)):
                 log.debug('Response not found for "%s" in cache. Querying from %s.', question, self.engine.nickname())
                 events.reply.emit(reply=AIReply.detailed(msg.wait()))
                 if output := processor.process(question, context=read_stdin(), query_prompt=self._query_prompt):
-                    events.reply.emit(reply=AIReply.info(output))
+                    events.reply.emit(reply=AIReply.final(output))
             else:
                 log.debug("Reply found for '%s' in cache.", question)
-                events.reply.emit(reply=AIReply.info(output))
-        except (NotImplementedError, ImpossibleQuery) as err:
+                events.reply.emit(reply=AIReply.final(output))
+        except (RuntimeError, NotImplementedError, ImpossibleQuery, DocumentsNotFound) as err:
             events.reply.emit(reply=AIReply.error(err))
-        except (MaxInteractionsReached, InaccurateResponse) as err:
+        except (MaxInteractionsReached, InaccurateResponse, ValidationError) as err:
             events.reply.emit(reply=AIReply.error(msg.unprocessable(err)))
         except UsageError as err:
             events.reply.emit(reply=AIReply.error(msg.invalid_command(err)))
@@ -183,6 +193,8 @@ class AskAi:
             if output:
                 shared.context.push("HISTORY", output, "assistant")
                 shared.context.set("LAST_REPLY", output, "assistant")
+                if not getattr(processor, "cacheable", True):
+                    shared.context.save()
 
         return status, output
 

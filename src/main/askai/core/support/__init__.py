@@ -7,7 +7,6 @@
 
 __all__ = [
     'chat_context', 
-    'langchain_support', 
     'llm_parser', 
     'os_utils', 
     'presets', 

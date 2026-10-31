@@ -19,13 +19,12 @@ from askai.core.component.internet_service import internet
 from askai.core.engine.openai.temperature import Temperature
 from askai.core.model.search_result import SearchResult
 from askai.core.router.tools.terminal import execute_bash
-from askai.core.support.langchain_support import lc_llm
 from askai.core.support.shared_instances import shared
-from langchain_core.prompts import PromptTemplate
 from typing import Optional
 from urllib.parse import urlparse
 
 import logging as log
+from askai.core.support.inference import complete
 
 
 def open_url(url: str) -> str:
@@ -46,18 +45,14 @@ def browse(query: str, search_engine) -> Optional[str]:
     :param query: The search query.
     """
     # fmt: off
-    template = PromptTemplate(
-        input_variables=["idiom", "datetime", "location", "question"],
-        template=prompt.read_prompt("search-builder")
-    )
+    template = prompt.read_prompt("search-builder")
     final_prompt: str = template.format(
         idiom=shared.idiom, datetime=geo_location.datetime,
         location=geo_location.location, question=query
     )
     # fmt: on
     log.info("Browser::[QUESTION] '%s'  context=''", final_prompt)
-    llm = lc_llm.create_chat_model(Temperature.DATA_ANALYSIS.temp)
-    response: str = llm.invoke(final_prompt).content
+    response = complete(final_prompt, Temperature.DATA_ANALYSIS.temp)
 
     if response and shared.UNCERTAIN_ID not in response:
         search: SearchResult = SearchResult.parse_response(query, response)

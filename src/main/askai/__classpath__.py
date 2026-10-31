@@ -31,7 +31,7 @@ if not is_debugging():
     warnings.filterwarnings("ignore", module="chromadb.db.impl.sqlite")
 
 if not os.environ.get("USER_AGENT"):
-    # The AskAI User Agent, required by the langchain framework
+    # The AskAI User Agent for HTTP requests
     ASKAI_USER_AGENT: str = "AskAI-User-Agent"
     os.environ["USER_AGENT"] = ASKAI_USER_AGENT
 

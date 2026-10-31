@@ -18,7 +18,7 @@ from askai.core.askai_configs import configs
 from askai.core.askai_events import *
 from askai.core.askai_messages import msg
 from askai.core.askai_prompt import prompt
-from askai.core.commander.commander import commands
+from askai.core.commander.commander import command_suggestions
 from askai.core.component.cache_service import cache, CACHE_DIR
 from askai.core.component.multimedia.audio_player import player
 from askai.core.component.multimedia.recorder import recorder
@@ -64,9 +64,29 @@ class AskAiCli(AskAi):
         mode: RouterMode,
     ):
         super().__init__(speak, debug, cacheable, tempo, engine_name, model_name, mode)
+        self._listening_indicator = None
         self._ready: bool = False
         self._query_prompt: str | None = query_prompt
         self._query_string: str | None = query_string
+        from askai.core.processors.taius import taius
+        from askai.cli.agent_interaction import AgentInteraction
+        from askai.cli.agent_progress import AgentProgress
+        from askai.cli.confirmation import Confirmation, show_confirmation
+        from askai.core.support.text_formatter import text_formatter as tf
+
+        interact = AgentInteraction(
+            lambda placeholder: shared.input_text(shared.username, placeholder),
+            lambda text: display_text(text, shared.nickname, markdown=False),
+            translate=msg.translate,
+            confirm=Confirmation(
+                lambda placeholder: shared.input_text("⚠ " + msg.t("Confirmation") + " › ", placeholder),
+                lambda message: show_confirmation(tf.console, message, msg.translate),
+                translate=msg.translate,
+            ),
+        )
+        self._agent_progress = AgentProgress(tf.console, interact)
+        taius.interact = self._agent_progress.interact
+        taius.emit = self._agent_progress.emit
         self._startup()
 
     def run(self) -> None:
@@ -80,7 +100,8 @@ class AskAiCli(AskAi):
                 question = None
                 break
             elif output:
-                cache.save_reply(question, output)
+                if getattr(self.mode.processor, "cacheable", True):
+                    cache.save_reply(question, output)
                 cache.save_input_history()
                 # FIXME This is only writing the final answer to the markdown file.
                 with open(self.console_path, "a+", encoding=Charset.UTF_8.val) as f_console:
@@ -97,12 +118,26 @@ class AskAiCli(AskAi):
         """Reply to the user with the AI-generated response.
         :param reply: The reply message to send as a reply to the user.
         """
-        if reply and (text := msg.translate(reply.message)):
-            log.debug(reply.message)
-            if configs.is_speak and reply.is_speakable:
-                self.engine.text_to_speech(text, f"{shared.nickname}")
-            else:
-                display_text(text, f"{shared.nickname}")
+        if not reply:
+            return
+        from askai.cli.answer_renderer import render_answer
+        from askai.cli.speech_renderer import stream_answer
+        from askai.core.support.text_formatter import text_formatter
+
+        text = reply.message if reply.is_final else msg.translate(reply.message)
+        label = f"{self.mode.icon} Taius"
+        render = lambda: render_answer(text_formatter.console, text, label) if reply.is_final else display_text(text, shared.nickname)
+        if configs.is_speak and reply.is_speakable:
+            def failed(error):
+                render()
+                events.reply.emit(reply=AIReply.error(str(error)))
+            shared.speech.speak(
+                text, failed,
+                present=lambda duration, cancelled: stream_answer(text_formatter.console, text, label, duration, cancelled),
+                wait=True,
+            )
+        else:
+            render()
 
     def _reply_error(self, reply: AIReply) -> None:
         """Reply to the user with an AI-generated error message or system error.
@@ -111,7 +146,8 @@ class AskAiCli(AskAi):
         if reply and (text := msg.translate(reply.message)):
             log.error(reply.message)
             if configs.is_speak and reply.is_speakable:
-                self.engine.text_to_speech(f"Error: {text}", f"{shared.nickname}")
+                display_text(f"Error: {text}", f"{shared.nickname}")
+                shared.speech.speak(f"Error: {text}", lambda error: events.reply.emit(reply=AIReply.error(str(error))))
             else:
                 display_text(f"%RED%Error: {text}%NC%", f"{shared.nickname}")
 
@@ -151,7 +187,12 @@ class AskAiCli(AskAi):
         """Callback to handle microphone listening events.
         :param ev: The event object representing the microphone listening event.
         """
-        pass  # CLI don't really care about this event
+        from askai.cli.listening_indicator import ListeningIndicator
+        from askai.core.support.text_formatter import text_formatter
+
+        if self._listening_indicator is None:
+            self._listening_indicator = ListeningIndicator(text_formatter.console, msg.translate)
+        self._listening_indicator.update(ev.args.listening, ev.args.text)
 
     def _cb_device_changed_event(self, ev: Event) -> None:
         """Callback to handle audio input device change events.
@@ -180,6 +221,8 @@ class AskAiCli(AskAi):
             "Loading input history",
             "Starting scheduler",
             "Setting up recorder",
+            "Checking speech engine",
+            "Preparing document index",
             "Starting player delay",
             "Finalizing startup",
         ]
@@ -192,11 +235,22 @@ class AskAiCli(AskAi):
             task = progress.add_task(f'[green] {msg.t("Starting up...")}', total=len(tasks))
             with progress:
                 os.chdir(Path.home())
-                progress.update(task, advance=1, description=f'[green] {msg.t("Downloading nltk data")}')
-                nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR)
+                from askai.core.support.startup import run_startup_tasks
+                from askai.core.processors.rag import rag
+
                 cache.cache_enable = configs.is_cache
-                progress.update(task, advance=1, description=f'[green] {msg.t("Loading input history")}')
-                KeyboardInput.preload_history(cache.load_input_history(commands()))
+                try:
+                    results = run_startup_tasks({
+                        "Downloading nltk data": lambda: nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR),
+                        "Loading input history": lambda: cache.load_input_history(command_suggestions()),
+                        "Checking speech engine": shared.speech.initialize_tts,
+                        "Preparing document index": rag.prepare,
+                    }, lambda name: progress.update(task, advance=1, description=f"[green] {msg.t(name)}"))
+                except BaseException:
+                    self._ready = True
+                    splash_thread.join()
+                    raise
+                KeyboardInput.preload_history(results["Loading input history"])
                 progress.update(task, advance=1, description=f'[green] {msg.t("Starting scheduler")}')
                 scheduler.start()
                 progress.update(task, advance=1, description=f'[green] {msg.t("Setting up recorder")}')
@@ -204,7 +258,6 @@ class AskAiCli(AskAi):
                 progress.update(task, advance=1, description=f'[green] {msg.t("Starting player delay")}')
                 player.start_delay()
                 progress.update(task, advance=1, description=f'[green] {msg.t("Finalizing startup")}')
-                pause.seconds(1)
             self._ready = True
             splash_thread.join()
             askai_bus.subscribe(MIC_LISTENING_EVENT, self._cb_mic_listening_event)
@@ -213,6 +266,7 @@ class AskAiCli(AskAi):
             display_text(str(self), markdown=False)
             self._reply(AIReply.info(self.mode.welcome()))
         elif configs.is_speak:
+            shared.speech.initialize_tts()
             nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR)
             recorder.setup()
             player.start_delay()

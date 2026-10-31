@@ -19,7 +19,8 @@ from collections import namedtuple
 from hspylib.core.metaclass.classpath import AnyPath
 from hspylib.core.metaclass.singleton import Singleton
 from hspylib.core.tools.dict_tools import get_or_default
-from langchain_community.retrievers.pinecone_hybrid_search import hash_text
+from hashlib import sha256
+
 from os.path import basename
 from pathlib import Path
 from torchvision.datasets.folder import is_image_file
@@ -30,6 +31,10 @@ import chromadb
 import logging as log
 import numpy
 import os
+
+def sha256_text(text: str) -> str:
+    return sha256(text.encode("utf-8")).hexdigest()
+
 
 Metadata: TypeAlias = Mapping[str, str | int | float | bool]
 
@@ -83,7 +88,7 @@ class ImageStore(metaclass=Singleton):
                 cat: str = category()
                 files: list[str] = list(filter(is_image_file, map(lambda fn: os.path.join(dir_path, fn), file_names)))
                 img_files.extend(
-                    ImageFile(hash_text(basename(f)), f, cat, offline_captioner(f) if with_caption else "No caption")
+                    ImageFile(sha256_text(basename(f)), f, cat, offline_captioner(f) if with_caption else "No caption")
                     for f in files
                 )
 

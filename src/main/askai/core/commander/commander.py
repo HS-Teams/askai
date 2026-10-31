@@ -12,7 +12,6 @@
 
 Copyright (c) 2024, AskAI
 """
-from functools import lru_cache
 from os.path import basename
 from pathlib import Path
 from string import Template
@@ -20,7 +19,8 @@ from textwrap import dedent
 import os
 import re
 
-from click import Command, Group
+from askai.cli.help_formatter import HelpGroup, render_help
+from click import Command
 from clitt.core.term.cursor import cursor
 from hspylib.core.config.path_object import PathObject
 from hspylib.core.enums.charset import Charset
@@ -62,84 +62,51 @@ COMMANDER_HELP_TPL = Template(
     | *Ctrl+F* | **Forget the input history.** |
     | *Ctrl+D* | **Exit the application.**     |
 
-    >   To get help about a specific command type: '/help \\<command\\>'
+    >   Use '/<command> --help' or '/help \\<command\\>'
     """))
 
-COMMANDER_HELP_CMD_TPL = Template(
-    dedent("""\
-    # AskAI Commander - HELP
-    ```
-    %CYAN%Command: %ORANGE%${command}%NC%
-
-        ${docstr}
-
-    %CYAN%Usage:\t%WHITE%/${usage}
-    ```
-    """))
 # fmt: on
 
 RE_ASKAI_CMD: str = r"^(?<!\\)/(\w+)( (.*))*$"
 
-__module__ = locals()
-
-
-@lru_cache
 def commands() -> list[str]:
-    """Return the list of all available commander commands.
-    :return: A list of strings representing the available commands.
-    """
-    all_commands: set[str] = set()
-    for name, obj in __module__.items():
-        if obj and isinstance(obj, Command) and not isinstance(obj, Group):
-            all_commands.add(f"/{name}")
-    return sorted(all_commands, reverse=True)
+    """Return slash commands from the same registry used for execution."""
+    return sorted((f"/{name}" for name in ask_commander.commands), reverse=True)
 
 
-@lru_cache
+def command_suggestions() -> list[str]:
+    """Expose commands, standard help and declared operation choices to LineInput."""
+    suggestions = set(commands())
+    for name, command in ask_commander.commands.items():
+        suggestions.add(f"/{name} --help")
+        arguments = [param for param in command.params if isinstance(param, click.Argument)]
+        if arguments and isinstance(arguments[0].type, click.Choice):
+            suggestions.update(f"/{name} {choice}" for choice in arguments[0].type.choices)
+    return sorted(suggestions, reverse=True)
+
+
 def commander_help(command: str | None = None) -> str:
-    """Return the help string for the specified commander command.
-    :param command: The command for which to retrieve help.
-    :return: A string containing the help information for the specified command.
-    """
-    if (command in __module__) and (cmd := __module__[command]):
-        return _format_help(cmd)
-    else:
-        help_str: str = ""
-        for cmd, obj in __module__.items():
-            if obj and isinstance(obj, Command) and not isinstance(obj, Group):
-                cmd_doc: str = f"{(obj.__doc__ or '').split(os.linesep, 1)[0]}**"
-                help_str += f"| /{'*' + cmd + '*':<8} | **{cmd_doc:<43} |\n"
-        h_str: str = f"| {'**Command**':<9} | {'**Description**':<45} |\n"
-        h_str += f"| {'-' * 9} | {'-' * 45} |\n"
-        return COMMANDER_HELP_TPL.substitute(commands=f"{h_str}{help_str}")
+    """Use Click's registered descriptions and usage for command help."""
+    if command:
+        if cmd := ask_commander.commands.get(command):
+            return _format_help(cmd)
+        raise click.UsageError(f"No such command: /{command}")
+    rows = "| Command | Description |\n| --- | --- |\n"
+    for name, cmd in sorted(ask_commander.commands.items()):
+        description = (cmd.help or "").splitlines()[0]
+        rows += f"| `/{name}` | {description} |\n"
+    return COMMANDER_HELP_TPL.substitute(commands=rows)
 
 
 def is_command(string: str) -> bool:
-    """Check if the given string is a command.
-    :param string: The string to check.
-    :return: True if the string is a command, False otherwise.
-    """
-    return string.startswith("/") and string in commands()
+    """Check whether a slash command is registered."""
+    return string in commands()
 
 
 def _format_help(command: Command) -> str:
-    """Return a formatted help string for the given command.
-    :param command: The command for which the help string will be formatted.
-    :return: A formatted string containing the help information for the specified command.
-    """
-    docstr: str = ""
-    cmd_help: str = str(command.__doc__ or "")
-    re_flags: int = re.MULTILINE | re.IGNORECASE
-    splits: list[str] = re.split(os.linesep, cmd_help, flags=re_flags)
-    for i, arg in enumerate(splits):
-        if mat := re.match(r":\w+\s+(\w+):\s+(.+)", arg.strip()):
-            docstr += f"\n\t\t- %BLUE%{mat.group(1).casefold():<15}%WHITE%\t: {mat.group(2).title()}"
-        elif arg.strip():
-            docstr += f"{arg}\n\n%CYAN%Arguments:%NC%\n"
-    usage_str: str = f"{command.name} {' '.join([f'<{p.name}>' for p in command.params])}"
-    cmd_title: str = (command.name or "").title()
-
-    return COMMANDER_HELP_CMD_TPL.substitute(command=cmd_title, docstr=docstr, usage=usage_str)
+    """Keep argument requirements, choices and options in sync with Click."""
+    with click.Context(command, info_name=f"/{command.name}") as context:
+        return command.get_help(context)
 
 
 def color_bool(condition: bool, true_text: str = "ON", false_text: str = "OFF") -> str:
@@ -179,7 +146,7 @@ def _init_context(context_size: int = 1000, engine_name: str = "openai", model_n
         askai_bus.subscribe(REPLY_EVENT, _reply_event)
 
 
-@click.group()
+@click.group(cls=HelpGroup)
 @click.pass_context
 def ask_commander(_) -> None:
     """AskAI commands group. This function serves as the entry point for the AskAI command-line interface (CLI)
@@ -195,27 +162,51 @@ def help(command: str) -> None:
     help message.
     :param command: The command to retrieve help for (optional).
     """
-    display_text(commander_help(command.replace("/", "")))
+    render_help(text_formatter.console, commander_help(command.replace("/", "")), overview=not command)
+
+
+@ask_commander.command()
+@click.argument("operation", type=click.Choice(["reset", "compact"]))
+def session(operation: str) -> None:
+    """Reset or compact the current agent session, preserving history and STM.
+
+    /session compact summarizes native context while keeping the session ID.
+    /session reset starts a new session on the next request.
+    """
+    from askai.core.processors.taius import taius
+    from askai.core.askai_messages import msg
+
+    if operation == "compact":
+        changed = taius.compact_session()
+        text_formatter.commander_print(msg.t(
+            "Session compacted. History and STM were preserved." if changed
+            else "No new session activity to compact."
+        ))
+        return
+    taius.reset_session()
+    text_formatter.commander_print(msg.t(
+        "Session reset. Your next request will start a new session with the AskAI tool prompt. History and STM were preserved."
+    ))
 
 
 @ask_commander.command()
 def assistive() -> None:
     """Toggle assistive mode ON/OFF."""
-    configs.is_assistive = not configs.is_assistive
+    SettingsCmd.set("askai.router.assistive.enabled", not configs.is_assistive, announce=False)
     text_formatter.commander_print(f"`Assistive responses` is {color_bool(configs.is_assistive)}")
 
 
 @ask_commander.command()
 def debug() -> None:
     """Toggle debug mode ON/OFF."""
-    configs.is_debug = not configs.is_debug
+    SettingsCmd.set("askai.debug.enabled", not configs.is_debug, announce=False)
     text_formatter.commander_print(f"`Debugging` is {color_bool(configs.is_debug)}")
 
 
 @ask_commander.command()
 def speak() -> None:
     """Toggle speak mode ON/OFF."""
-    configs.is_speak = not configs.is_speak
+    SettingsCmd.set("askai.speak.enabled", not configs.is_speak, announce=False)
     text_formatter.commander_print(f"`Speech-To-Text` is {color_bool(configs.is_speak)}")
 
 
@@ -238,19 +229,32 @@ def context(operation: str, name: str | None = None) -> None:
 
 
 @ask_commander.command()
-@click.argument("operation", default="list")
-def history(operation: str) -> None:
-    """Manages the current input history.
-    :param operation: The operation to perform on contexts. Options: [list|forget].
+@click.argument("operation", type=click.Choice(["list", "enable", "forget"]), default="list")
+@click.argument("value", required=False)
+def history(operation: str, value: str | None = None) -> None:
+    """List session conversations, configure resume, or forget keyboard input.
+
+    /history list [YYYY-MM-DD] lists all dates when omitted.
+    /history enable <0|1> saves whether to resume a session after restarting.
+    /history forget clears keyboard input only; /session reset starts a new session.
     """
-    match operation.casefold():
+    match operation:
         case "list":
-            HistoryCmd.history_list()
+            if value:
+                from datetime import date
+                try:
+                    date.fromisoformat(value)
+                except ValueError as error:
+                    raise click.BadParameter("Use a date in YYYY-MM-DD format.") from error
+            HistoryCmd.history_list(value)
+        case "enable":
+            if value not in ("0", "1"):
+                raise click.BadParameter("Usage: /history enable <0|1>")
+            SettingsCmd.set("askai.context.keep.conversation", value == "1")
         case "forget":
+            if value is not None:
+                raise click.BadParameter("Usage: /history forget")
             HistoryCmd.history_forget()
-        case _:
-            err = str(click.BadParameter(f"Invalid settings operation: '{operation}'"))
-            text_formatter.commander_print(f"Error: {err}")
 
 
 @ask_commander.command()
@@ -336,7 +340,7 @@ def cache(operation: str, args: tuple[str, ...]) -> None:
                 err: str = str(click.MissingParameter(f"Arguments missing. Usage /cache enable \\<0|1\\>"))
                 text_formatter.commander_print(f"Error: {err}")
             else:
-                configs.is_cache = to_bool(args[0])
+                SettingsCmd.set("askai.cache.enabled", to_bool(args[0]), announce=False)
                 text_formatter.commander_print(f"Caching has been *{'en' if configs.is_cache else 'dis'}abled* !")
         case "ttl":
             if not args:
@@ -362,22 +366,26 @@ def tempo(speed: int | None = None) -> None:
 
 @ask_commander.command()
 @click.argument("operation", default="list")
-@click.argument("name", default="onyx")
-def voices(operation: str, name: str | int | None = None) -> None:
-    """Manages speech-to-text voice operations.
+@click.argument("name", nargs=-1)
+def voices(operation: str, name: tuple[str, ...]) -> None:
+    """Manages the active engine speech provider.
     :param operation: The action to perform on voices. Options: [list/set/play]
     :param name: The voice name.
     """
-    match operation.casefold():
-        case "list":
-            TtsSttCmd.voice_list()
-        case "set":
-            TtsSttCmd.voice_set(name)
-        case "play":
-            TtsSttCmd.voice_play(name)
-        case _:
-            err = str(click.BadParameter(f"Invalid voices operation: '{operation}'"))
-            text_formatter.commander_print(f"%RED%{err}%NC%")
+    voice_name = " ".join(name) or None
+    try:
+        match operation.casefold():
+            case "list":
+                TtsSttCmd.voice_list()
+            case "set":
+                TtsSttCmd.voice_set(voice_name)
+            case "play":
+                TtsSttCmd.voice_play(voice_name)
+            case _:
+                err = str(click.BadParameter(f"Invalid voices operation: '{operation}'"))
+                text_formatter.commander_print(f"%RED%{err}%NC%")
+    except (RuntimeError, ValueError) as error:
+        raise click.ClickException(str(error)) from error
 
 
 @ask_commander.command()
@@ -470,18 +478,18 @@ def camera(operation: str, args: list) -> None:
 @click.argument("router_mode", default="")
 def mode(router_mode: str) -> None:
     """Change the AskAI routing mode.
-    :param router_mode: The routing mode. Options: [rag|chat|splitter]
+    :param router_mode: The routing mode. Options: [rag|chat|taius]
     """
     if not router_mode:
-        text_formatter.commander_print(f"Available routing modes: **[rag|chat|splitter]**. Current: `{shared.mode}`")
+        text_formatter.commander_print(f"Available routing modes: **[rag|chat|taius]**. Current: `{shared.mode}`")
     else:
         match router_mode.casefold():
             case "rag":
                 events.mode_changed.emit(mode="RAG")
             case "chat":
                 events.mode_changed.emit(mode="CHAT")
-            case "splitter":
-                events.mode_changed.emit(mode="SPLITTER")
+            case "taius":
+                events.mode_changed.emit(mode="TAIUS")
             case _:
                 events.mode_changed.emit(mode="DEFAULT")
 
@@ -538,7 +546,7 @@ def rag(operation: str, args: tuple[str, ...]) -> None:
                 err: str = str(click.MissingParameter(f"Arguments missing. Usage /rag enable \\<0|1\\>"))
                 text_formatter.commander_print(f"Error: {err}")
             else:
-                configs.is_rag = to_bool(args[0])
+                SettingsCmd.set("askai.rag.enabled", to_bool(args[0]), announce=False)
                 text_formatter.commander_print(f"RAG has been *{'en' if configs.is_rag else 'dis'}abled* !")
         case _:
             text_formatter.commander_print(f"`RAG` is {color_bool(configs.is_rag)}")

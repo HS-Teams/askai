@@ -84,7 +84,20 @@ class AskAiApp(App[None]):
         self._askai: AskAi = AskAi(speak, debug, cacheable, tempo, engine_name, model_name, mode)
         self._re_render: bool = True
         self._display_buffer: list[str] = list()
+        from askai.core.processors.taius import taius
+        taius.interact = self._agent_interaction
+        taius.emit = self._agent_event
         self._startup()
+
+    def _agent_event(self, event):
+        if event.kind == "tool_progress":
+            self.call_from_thread(self.notify, msg.t(event.data.get("message", "")))
+        if event.kind == "stage" and event.data.get("stage") == "compaction":
+            self.call_from_thread(self.notify, msg.t("Compacting session…"))
+
+    def _agent_interaction(self, method: str, params: dict) -> dict:
+        from askai.tui.agent_interaction import AgentInteraction
+        return self.call_from_thread(self.push_screen_wait, AgentInteraction(method, params, translate=msg.translate))
 
     def __str__(self) -> str:
         return VtColor.strip_colors(shared.app_info)
@@ -183,6 +196,17 @@ class AskAiApp(App[None]):
         """Refresh bindings for forward / back when the document changes."""
         self.refresh_bindings()
 
+    async def on_unmount(self) -> None:
+        import asyncio
+
+        from askai.core.processors.taius import taius
+
+        try:
+            if self.return_code == 0:
+                await asyncio.to_thread(taius.compact_on_exit)
+        finally:
+            await asyncio.to_thread(shared.close)
+
     async def action_back(self) -> None:
         """Navigate backwards."""
         await self.md_console.back()
@@ -263,7 +287,7 @@ class AskAiApp(App[None]):
         Push-To-Talk as an input method, converting spoken words into text.
         """
         self.enable_controls(False)
-        if spoken_text := self.engine.speech_to_text():
+        if spoken_text := shared.listen():
             self.display_text(f"{shared.username_md}: {spoken_text}")
             if self.ask_and_reply(spoken_text):
                 self.suggester.add_suggestion(spoken_text)
@@ -309,6 +333,8 @@ class AskAiApp(App[None]):
         """Callback to handle markdown console updates.
         This method is responsible for refreshing or updating the console display in markdown format.
         """
+        if getattr(self, "_speech_streaming", False):
+            return
         if not self.console_path.exists():
             self.action_clear()
         await self._write_markdown()
@@ -324,9 +350,44 @@ class AskAiApp(App[None]):
         prev_msg: str = self._display_buffer[-1] if self._display_buffer else ""
         if reply and prev_msg != reply.message:
             log.debug(reply.message)
-            self.display_text(f"{shared.nickname_md} {reply.message}")
+            text = reply.message.lstrip("\r\n")
+            rendered = f"{shared.nickname_md} {text}"
             if configs.is_speak and reply.is_speakable:
-                self.engine.text_to_speech(reply.message, f"{shared.nickname_md} ")
+                def failed(error):
+                    self._display_buffer.append(rendered)
+                    events.reply.emit(reply=AIReply.error(str(error)))
+                shared.speech.speak(
+                    text, failed,
+                    present=lambda duration, cancelled: self._stream_spoken_reply(text, rendered, duration, cancelled),
+                )
+            elif reply.is_final:
+                self._display_buffer.append(rendered)
+            else:
+                self.display_text(rendered)
+
+    async def _begin_spoken_reply(self):
+        await self._write_markdown()
+        self._speech_streaming = True
+        return self.console_path.read_text(encoding=Charset.UTF_8.val)
+
+    async def _update_spoken_reply(self, markdown):
+        await self.md_console.document.update(markdown)
+        self.md_console.scroll_end(animate=False)
+
+    def _finish_spoken_reply(self, rendered):
+        self._display_buffer.append(rendered)
+        self._speech_streaming = False
+
+    def _stream_spoken_reply(self, text, rendered, duration, cancelled):
+        from askai.core.speech.presentation import reveal_text
+
+        previous = self.call_from_thread(self._begin_spoken_reply)
+        try:
+            reveal_text(text, duration, cancelled, lambda partial: self.call_from_thread(
+                self._update_spoken_reply, f"{previous}\n\n{shared.nickname_md} {partial}"
+            ))
+        finally:
+            self.call_from_thread(self._finish_spoken_reply, rendered)
 
     def _reply_error(self, reply: AIReply) -> None:
         """Reply to the user with an AI-generated error message or system error.
@@ -337,7 +398,7 @@ class AskAiApp(App[None]):
             log.error(reply.message)
             self.display_text(f"{shared.nickname_md} Error: {reply.message}")
             if configs.is_speak and reply.is_speakable:
-                self.engine.text_to_speech(f"Error: {reply.message}", f"{shared.nickname_md} ")
+                shared.speech.speak(f"Error: {reply.message}", lambda error: events.reply.emit(reply=AIReply.error(str(error))))
 
     def display_text(self, markdown_text: str) -> None:
         """Send the text to the Markdown console.
@@ -383,7 +444,7 @@ class AskAiApp(App[None]):
         """
         self._reply(AIReply.info(msg.device_switch(str(ev.args.device))))
 
-    @work(thread=True, exclusive=True)
+    @work(thread=True)
     def ask_and_reply(self, question: str) -> tuple[bool, Optional[str]]:
         """Ask the specified question to the AI and provide the reply.
         :param question: The question to ask the AI engine.
@@ -400,7 +461,14 @@ class AskAiApp(App[None]):
         os.chdir(Path.home())
         askai_bus = AskAiEvents.bus(ASKAI_BUS_NAME)
         askai_bus.subscribe(REPLY_EVENT, self._cb_reply_event)
-        nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR)
+        from askai.core.support.startup import run_startup_tasks
+        from askai.core.processors.rag import rag
+
+        run_startup_tasks({
+            "nltk": lambda: nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR),
+            "speech": shared.speech.initialize_tts,
+            "rag": rag.prepare,
+        })
         recorder.setup()
         scheduler.start()
         askai_bus.subscribe(MIC_LISTENING_EVENT, self._cb_mic_listening_event)

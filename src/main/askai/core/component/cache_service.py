@@ -21,7 +21,7 @@ from hspylib.core.metaclass.singleton import Singleton
 from hspylib.core.tools.commons import file_is_not_empty, touch_file
 from hspylib.core.tools.text_tools import ensure_endswith, hash_text
 from hspylib.modules.cache.ttl_cache import TTLCache
-from langchain_core.messages import BaseMessage
+from askai.core.support.short_term_memory import Message
 from pathlib import Path
 from shutil import copyfile
 from typing import Optional
@@ -194,7 +194,7 @@ class CacheService(metaclass=Singleton):
             with open(str(ASKAI_INPUT_HISTORY_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
                 list(
                     map(
-                        lambda h: f_hist.write(ensure_endswith(os.linesep, h)),
+                        lambda h: f_hist.write(h + "\n"),
                         filter(lambda h: not h.startswith("/"), history),
                     )
                 )
@@ -216,7 +216,7 @@ class CacheService(metaclass=Singleton):
         """
         if context := (context or list()):
             with open(str(ASKAI_CONTEXT_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
-                list(map(lambda h: f_hist.write(ensure_endswith(os.linesep, h)), context))
+                list(map(lambda h: f_hist.write(h + "\n"), context))
 
     def read_context(self) -> list[str]:
         """Read the context window entries from the context file.
@@ -225,17 +225,17 @@ class CacheService(metaclass=Singleton):
         context: str = ASKAI_CONTEXT_FILE.read_text()
         return list(filter(str.__len__, map(str.strip, re.split(r"(human|assistant|system):", context, flags=flags))))
 
-    def save_memory(self, memory: list[BaseMessage] = None) -> None:
+    def save_memory(self, memory: list[Message] = None) -> None:
         """Save the context window entries into the context file.
         :param memory: A list of memory entries to be saved.
         """
 
-        def _get_role_(msg: BaseMessage) -> str:
-            return type(msg).__name__.rstrip("Message").replace("AI", "Assistant").casefold()
+        def _get_role_(msg: Message) -> str:
+            return "human" if msg.role == "user" else msg.role
 
         if memory := (memory or list()):
             with open(str(ASKAI_MEMORY_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
-                list(map(lambda m: f_hist.write(ensure_endswith(os.linesep, f"{_get_role_(m)}: {m.content}")), memory))
+                list(map(lambda m: f_hist.write(f"{_get_role_(m)}: {m.content}\n"), memory))
 
     def read_memory(self) -> list[str]:
         """Reads and parses the memory from the context file.

@@ -35,9 +35,15 @@ class AIReply:
     is_debug: bool
     verbosity: Verbosity
     is_speakable: bool
+    is_final: bool = False
 
     def __str__(self) -> str:
         return self.message
+
+    @staticmethod
+    def final(message: str) -> "AIReply":
+        """A localized final answer whose Markdown must be preserved by the view."""
+        return AIReply(message, True, False, Verbosity.NORMAL, True, is_final=True)
 
     @staticmethod
     def info(message: AnyText, verbosity: Verbosity = Verbosity.NORMAL, speakable: bool = True) -> "AIReply":

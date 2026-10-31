@@ -21,13 +21,6 @@ from fake_useragent import UserAgent
 from googleapiclient.errors import HttpError
 from hspylib.core.metaclass.singleton import Singleton
 from hspylib.core.zoned_datetime import now
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_classic.chains.llm import LLMChain
-from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.tools import Tool
-from langchain_google_community import GoogleSearchAPIWrapper
-from langchain_text_splitters import RecursiveCharacterTextSplitter, TextSplitter
 from openai import APIError
 import requests
 from bs4 import BeautifulSoup
@@ -41,8 +34,10 @@ from askai.core.component.geo_location import geo_location
 from askai.core.engine.openai.temperature import Temperature
 from askai.core.model.ai_reply import AIReply
 from askai.core.model.search_result import SearchResult
-from askai.core.support.langchain_support import lc_llm
 from askai.core.support.shared_instances import shared
+
+
+from askai.core.component.search_presentation import CATEGORY_ICONS as SEARCH_CATEGORY_ICONS
 
 
 class InternetService(metaclass=Singleton):
@@ -55,17 +50,7 @@ class InternetService(metaclass=Singleton):
     ASKAI_INTERNET_DATA_KEY = "askai-internet-data"
 
     # fmt: off
-    CATEGORY_ICONS = {
-        "Weather": "",
-        "Sports": "醴",
-        "News": "",
-        "Celebrities": "",
-        "People": "",
-        "Programming": "",
-        "Travel": "",
-        "General": "",
-        "Maps": "",
-    }
+    CATEGORY_ICONS = SEARCH_CATEGORY_ICONS
 
     SITE_ICONS = defaultdict(str, {
         "linkedin.com": "",
@@ -160,11 +145,7 @@ class InternetService(metaclass=Singleton):
         return f"{google_query} {sites}"
 
     def __init__(self):
-        self._google: GoogleSearchAPIWrapper | None = None
-        self._tool: Tool | None = None
-        self._text_splitter: TextSplitter = RecursiveCharacterTextSplitter(
-            chunk_size=configs.chunk_size, chunk_overlap=configs.chunk_overlap
-        )
+        self._google = None
 
     @property
     def refine_template(self) -> str:
@@ -181,10 +162,8 @@ class InternetService(metaclass=Singleton):
         # Lazy initialization to allow GOOGLE_API_KEY be optional.
         if not self._google:
             API_KEYS.ensure("GOOGLE_API_KEY", "google_search")
-            self._google = GoogleSearchAPIWrapper(k=k, google_api_key=API_KEYS.GOOGLE_API_KEY)
-            self._tool = Tool(
-                name="google_search", description="Search Google for recent results.", func=self._google.run
-            )
+            from googleapiclient.discovery import build
+            self._google = build("customsearch", "v1", developerKey=API_KEYS.GOOGLE_API_KEY)
         events.reply.emit(reply=AIReply.info(msg.searching()))
         terms: str = self._build_google_query(search).strip()
         question: str = re.sub(r"(\w+:)*|((\w+\.\w+)*)", "", terms, flags=re.DOTALL | re.MULTILINE)
@@ -192,16 +171,13 @@ class InternetService(metaclass=Singleton):
         try:
             log.info("Searching Google for '%s'", terms)
             events.reply.emit(reply=AIReply.debug(msg.final_query(terms)))
-            results: list[str] = str(self._tool.run(terms, verbose=configs.is_debug)).split(" ")
-            refine_prompt = PromptTemplate.from_template(self.refine_template).format(
-                idiom=shared.idiom, sources=search.sites, location=geo_location.location, datetime=geo_location.datetime
-            )
-            llm_prompt = ChatPromptTemplate.from_messages([("system", refine_prompt), ("human", "{question}")])
-            docs: List[Document] = [Document(d) for d in results]
-            chain = create_stuff_documents_chain(
-                lc_llm.create_chat_model(temperature=Temperature.COLDEST.temp), llm_prompt
-            )
-            output = chain.invoke({"question": question, "context": docs})
+            import os
+            results = self._google.cse().list(q=terms, cx=os.environ["GOOGLE_CSE_ID"], num=k).execute()
+            instructions = self.refine_template.format(idiom=shared.idiom, sources=search.sites,
+                location=geo_location.location, datetime=geo_location.datetime)
+            output = shared.engine.complete([
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": f"Question: {question}\nSearch results: {results.get('items', [])}"}])
         except (HttpError, APIError) as err:
             return msg.fail_to_search(str(err))
 
@@ -216,9 +192,6 @@ class InternetService(metaclass=Singleton):
         scrap_prompt: str = (
             "Summarize the following webpage content in concise, factual English (max 150 words):\n\n{text}\n\nSummary:"
         )
-        llm_prompt = ChatPromptTemplate.from_messages([("system", scrap_prompt)])
-        chain = LLMChain(llm=lc_llm.create_chat_model(temperature=Temperature.COLDEST.temp), prompt=llm_prompt)
-
         ua: UserAgent = UserAgent()
         summaries: list[dict] = []
 
@@ -230,11 +203,11 @@ class InternetService(metaclass=Singleton):
                 text = " ".join(s.strip() for s in soup.stripped_strings)
                 text = text[:6000]  # truncate large pages
 
-                summary = chain.invoke({"text": text})
+                summary = shared.engine.complete([{"role": "user", "content": scrap_prompt.format(text=text)}])
                 summaries.append({
                     "url": url,
                     "title": soup.title.string if soup.title else "Untitled",
-                    "summary": summary["text"].strip()
+                    "summary": summary.strip()
                 })
             except Exception as e:
                 summaries.append({

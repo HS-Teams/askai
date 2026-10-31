@@ -1,0 +1,60 @@
+import unittest
+from unittest.mock import Mock, patch
+from askai.cli.agent_interaction import AgentInteraction
+
+
+class InteractionTests(unittest.TestCase):
+    def setUp(self):
+        tty = patch("askai.cli.agent_interaction.sys.stdin.isatty", return_value=True)
+        tty.start()
+        self.addCleanup(tty.stop)
+        self.show = Mock()
+
+    def test_approval_uses_project_reader_and_human_message(self):
+        read = Mock(return_value="Sim.")
+        response = AgentInteraction(read, self.show)(
+            "item/commandExecution/requestApproval",
+            {
+                "reason": "Posso reproduzir a música?",
+                "command": "afplay song.mp3",
+                "threadId": "internal-id",
+                "availableDecisions": ["accept", "cancel"],
+            },
+        )
+        self.assertEqual(response, {"decision": "accept"})
+        read.assert_called_once()
+        rendered = self.show.call_args.args[0]
+        self.assertIn("Posso reproduzir", rendered)
+        self.assertNotIn("internal-id", rendered)
+        self.assertNotIn("availableDecisions", rendered)
+
+    def test_negative_voice_answer_uses_supported_cancel(self):
+        response = AgentInteraction(Mock(return_value="Não."), self.show)(
+            "item/commandExecution/requestApproval",
+            {"availableDecisions": ["accept", "cancel"]},
+        )
+        self.assertEqual(response, {"decision": "cancel"})
+
+    def test_ambiguous_answer_does_not_authorize(self):
+        read = Mock(side_effect=["talvez", "não"])
+        response = AgentInteraction(read, self.show)("approval", {})
+        self.assertEqual(response, {"decision": "decline"})
+        self.assertEqual(read.call_count, 2)
+
+    def test_questions_use_project_input(self):
+        read = Mock(return_value="Downloads")
+        response = AgentInteraction(read, self.show)(
+            "item/tool/requestUserInput",
+            {"questions": [{"id": "folder", "question": "Qual pasta?"}]},
+        )
+        self.assertEqual(response, {"answers": {"folder": {"answers": ["Downloads"]}}})
+
+    def test_secret_does_not_use_voice_or_visible_input(self):
+        read = Mock()
+        secret = Mock(return_value="secret")
+        AgentInteraction(read, self.show, secret)(
+            "item/tool/requestUserInput",
+            {"questions": [{"id": "key", "question": "Chave?", "isSecret": True}]},
+        )
+        read.assert_not_called()
+        secret.assert_called_once()

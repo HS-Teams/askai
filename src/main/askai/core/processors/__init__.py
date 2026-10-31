@@ -11,7 +11,6 @@ __all__ = [
     'qna', 
     'qstring', 
     'rag', 
-    'splitter', 
-    'task_splitter'
+    'taius',
 ]
 __version__ = '1.2.19'

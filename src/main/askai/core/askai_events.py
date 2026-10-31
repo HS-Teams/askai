@@ -39,7 +39,7 @@ class AskAiEvents(Enumeration):
         ASKAI_BUS_NAME,
         abort=FluidEvent(ABORT_EVENT, message=None),
         reply=FluidEvent(REPLY_EVENT, erase_last=False),
-        listening=FluidEvent(MIC_LISTENING_EVENT, listening=True),
+        listening=FluidEvent(MIC_LISTENING_EVENT, listening=True, text=""),
         device_changed=FluidEvent(DEVICE_CHANGED_EVENT, device=None),
         mode_changed=FluidEvent(MODE_CHANGED_EVENT, mode=None, sum_path=None, glob=None),
     )
