@@ -47,7 +47,11 @@ class LlamaSpeech:
         if playback:
             from askai.core.component.multimedia.audio_player import player
 
-            player.play_audio_file(path, self._configs.tempo)
+            from askai.core.support.cache_policy import release_transient_audio
+            try:
+                player.play_audio_file(path, self._configs.tempo)
+            finally:
+                release_transient_audio(path)
         return path
 
     def _generate(self, text: str, voice: str, path: Path) -> None:

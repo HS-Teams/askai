@@ -54,6 +54,7 @@ class SpeechOutputQueue:
     def _run(self):
         while True:
             job = self._queue.get()
+            path = None
             try:
                 if job is None:
                     return
@@ -72,4 +73,6 @@ class SpeechOutputQueue:
                     except Exception:
                         logging.exception("Speech error handler failed")
             finally:
+                from askai.core.support.cache_policy import release_transient_audio
+                release_transient_audio(path)
                 self._queue.task_done()

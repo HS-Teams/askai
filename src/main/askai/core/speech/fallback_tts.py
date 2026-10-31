@@ -59,5 +59,9 @@ class FallbackTTS:
             # Provider-specific voice names must not overwrite the Phonon preference.
             path = self._active.synthesize(text, prefix, stream, False, None)
         if playback and path:
-            self._play(path)
+            from askai.core.support.cache_policy import release_transient_audio
+            try:
+                self._play(path)
+            finally:
+                release_transient_audio(path)
         return path

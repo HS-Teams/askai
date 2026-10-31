@@ -88,5 +88,7 @@ class OpenAISpeech:
                     pause.seconds(player.start_delay())
                     streamer.stream_text(text, prefix)
                 speak_thread.join()  # Block until the speech has finished.
+                from askai.core.support.cache_policy import release_transient_audio
+                release_transient_audio(speech_file_path)
             return Path(speech_file_path)
         return None

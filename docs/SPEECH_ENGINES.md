@@ -82,3 +82,12 @@ the queue's own ffplay process. An already-running provider synthesis can finish
 and populate its cache, but cancelled audio is not played. Shutdown waits for that
 bounded provider operation to finish. Failures are reported without recursively
 trying to speak the error. Music playback is independent of this queue.
+
+## Cache switch
+
+`/cache enable 1` (default) enables response, audio and translation caches.
+`/cache enable 0` bypasses existing cached results and does not add new entries.
+Audio is generated into a temporary directory, removed after queued playback or
+on process exit for unplayed output. Existing cached audio remains untouched.
+Translation providers and local language detection bypass their result caches.
+The response TTL does not apply to audio or translation caches.
