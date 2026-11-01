@@ -78,3 +78,16 @@ class MediaPlayerTests(unittest.TestCase):
         with patch("psutil.Process") as process, self.assertRaises(ValueError):
             self.player.control("next")
         process.assert_not_called()
+
+    def test_status_discards_reused_pid(self):
+        self.player.storage.mkdir()
+        self.player.state_file.write_text(json.dumps({'pid': 42, 'created': 1.0}))
+        with patch('psutil.Process') as process:
+            process.return_value.create_time.return_value = 2.0
+            self.assertIsNone(self.player.status())
+
+    def test_volume_clamps_to_system_limits(self):
+        for current, delta, expected in ((98, 5, 100), (2, -5, 0)):
+            with patch('subprocess.run', return_value=Mock(stdout=str(current))) as run:
+                self.assertEqual(self.player.volume(delta), expected)
+                self.assertEqual(run.call_args.args[0][-1], f'set volume output volume {expected}')

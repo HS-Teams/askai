@@ -119,3 +119,24 @@ class MediaPlayer:
                     action
                 ],
             }
+
+    def status(self) -> dict | None:
+        with self._locked():
+            process = self._active()
+            if process is None:
+                return None
+            state = json.loads(self.state_file.read_text())
+            return {**state, "state": "paused" if process.status() == psutil.STATUS_STOPPED else "playing"}
+
+    @staticmethod
+    def volume(change: int = 0) -> int:
+        """Read or adjust macOS output volume, independently of media ownership."""
+        current = int(subprocess.run(
+            ["osascript", "-e", "output volume of (get volume settings)"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip())
+        value = max(0, min(100, current + change))
+        if change:
+            subprocess.run(["osascript", "-e", f"set volume output volume {value}"],
+                           capture_output=True, text=True, check=True)
+        return value
