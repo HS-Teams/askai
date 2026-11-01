@@ -44,14 +44,17 @@ class SpeechContractTests(unittest.TestCase):
         for provider in ("google", "whisper"):
             with self.subTest(provider=provider), patch(
                 f"speech_recognition.Recognizer.recognize_{provider}",
-                return_value="ola",
+                return_value=("ola" if provider == 'google' else
+                              {'text': 'ola', 'segments': [{'avg_logprob': -.3}]}),
             ) as recognize:
                 self.assertEqual(
                     create_stt(provider).transcribe(buffer.getvalue(), "pt"), "ola"
                 )
                 audio = recognize.call_args.args[0]
                 self.assertEqual(audio.sample_rate, 16000)
-                self.assertEqual(recognize.call_args.kwargs, {"language": "pt"})
+                self.assertEqual(recognize.call_args.kwargs['language'], 'pt')
+                if provider == 'google':
+                    self.assertEqual(recognize.call_args.kwargs, {'language': 'pt'})
 
     def test_invalid_wav_does_not_call_provider(self):
         with patch("speech_recognition.Recognizer.recognize_google") as recognize:
@@ -70,7 +73,9 @@ class SpeechLanguageTests(unittest.TestCase):
             wav.writeframes(b"\x00\x00" * 160)
         for provider, language in (("google", "pt-BR"), ("whisper", "pt")):
             with self.subTest(provider=provider), patch(
-                f"speech_recognition.Recognizer.recognize_{provider}", return_value="liste meus downloads"
+                f"speech_recognition.Recognizer.recognize_{provider}",
+                return_value=('liste meus downloads' if provider == 'google' else
+                              {'text': 'liste meus downloads', 'segments': [{'avg_logprob': -.3}]}),
             ) as recognize:
                 self.assertEqual(create_stt(provider).transcribe(buffer.getvalue(), "pt_BR"), "liste meus downloads")
-                self.assertEqual(recognize.call_args.kwargs, {"language": language})
+                self.assertEqual(recognize.call_args.kwargs['language'], language)
