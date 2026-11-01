@@ -117,8 +117,8 @@ class CodexBackend:
         with self._connections.lease(task.read_only if task.persist_history else False, actions_allowed=not task.read_only) as transport, ExitStack() as stack:
             options = {
                 "cwd": str(task.cwd.resolve()),
-                "approvalPolicy": "on-request",
-                "sandbox": "read-only" if task.read_only else "workspace-write",
+                "approvalPolicy": "never" if task.read_only else "on-request",
+                "sandbox": "read-only",
             }
             if not task.persist_history:
                 options["config"] = {"mcp_servers.askai_desktop.enabled": not task.read_only}
@@ -194,12 +194,9 @@ class CodexBackend:
             }
             if task.model:
                 turn_options['model'] = task.model
-            if not task.persist_history:
-                turn_options["approvalPolicy"] = "never" if task.read_only else "on-request"
-                turn_options["sandboxPolicy"] = (
-                    {"type": "readOnly"} if task.read_only else
-                    {"type": "workspaceWrite", "writableRoots": [str(task.cwd.resolve())], "networkAccess": False}
-                )
+            # Apply on every turn, including resumes of formerly writable sessions.
+            turn_options["approvalPolicy"] = "never" if task.read_only else "on-request"
+            turn_options["sandboxPolicy"] = {"type": "readOnly"}
             turn_options["summary"] = "auto" if self._debug() else "none"
             turn_options["effort"] = os.getenv("ASKAI_CODEX_REASONING_EFFORT", "low")
             if task.output_schema is not None:

@@ -1,13 +1,46 @@
 import unittest
 from pathlib import Path
 from threading import Event
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from askai.core.agents.codex import CodexBackend
 from askai.core.agents.contracts import AgentTask, AgentError
 
 
 class CodexTests(unittest.TestCase):
+    def test_writes_require_escalation_for_new_resumed_and_private_turns(self):
+        for session in (None, 's'):
+            for history in (True, False):
+                for read_only in (False, True):
+                    with self.subTest(session=session, history=history, read_only=read_only):
+                        transport = self.transport([])
+                        backend = CodexBackend(transport_factory=lambda _: transport)
+                        with patch.object(backend, '_consume', return_value=Mock()):
+                            if session and not history:
+                                backend.run(AgentTask('start', Path.cwd(), persist_history=False),
+                                            Mock(), Mock(), Event())
+                                transport.request.reset_mock()
+                            backend.run(AgentTask('remove selected files', Path.cwd(), session_id=session,
+                                                  persist_history=history, read_only=read_only),
+                                        Mock(), Mock(), Event())
+                        for call in transport.request.call_args_list:
+                            method, options = call.args
+                            if method in ('thread/start', 'thread/resume'):
+                                self.assertEqual(options['sandbox'], 'read-only')
+                            if method == 'turn/start':
+                                self.assertEqual(options['sandboxPolicy'], {'type': 'readOnly'})
+                                self.assertEqual(options['approvalPolicy'], 'never' if read_only else 'on-request')
+
+    def test_file_deletion_approval_denial_is_returned_to_codex(self):
+        transport = Mock()
+        interact = Mock(return_value={'decision': 'decline'})
+        request = {'id': 42, 'method': 'item/commandExecution/requestApproval',
+                   'params': {'command': 'rm /example/selected-file'}}
+        CodexBackend._respond(transport, request, interact)
+        interact.assert_called_once_with(request['method'], request['params'])
+        transport.send.assert_called_once_with({'id': 42, 'result': {'decision': 'decline'}})
+
+
     def transport(self, notifications):
         transport = Mock()
         transport.__enter__ = Mock(return_value=transport)
