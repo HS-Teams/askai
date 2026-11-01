@@ -90,6 +90,15 @@ class AskAiApp(App[None]):
         self._startup()
 
     def _agent_event(self, event):
+        if event.kind == "reasoning_summary":
+            if configs.is_debug:
+                events.reply.emit(reply=AIReply.debug("Debug · Codex: " + event.data["text"]))
+            return
+        if event.kind == "initial_commentary":
+            text = event.data["text"]
+            self.call_from_thread(self._display_buffer.append, f"{shared.nickname_md} {text}")
+            if configs.is_speak:
+                shared.speech.speak(text, lambda error: log.warning("Initial commentary TTS failed: %s", error), wait=False, immediate=True)
         if event.kind == "tool_progress":
             self.call_from_thread(self.notify, msg.t(event.data.get("message", "")))
         if event.kind == "stage" and event.data.get("stage") == "compaction":
@@ -461,7 +470,10 @@ class AskAiApp(App[None]):
         """Callback to handle audio input device change events.
         :param ev: The event object representing the device change.
         """
-        self._reply(AIReply.info(msg.device_switch(str(ev.args.device))))
+        self.call_later(
+            self.notify, msg.translate(msg.device_switch(str(ev.args.device))).strip(),
+            title=msg.t("System"), severity="information",
+        )
 
     @work(thread=True)
     def ask_and_reply(self, question: str) -> tuple[bool, Optional[str]]:

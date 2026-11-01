@@ -15,7 +15,7 @@ class AgentEngine:
     def __init__(self, name: str, model: str | None = None):
         self.name = normalize_agent(name)
         self.model = model
-        self.backend = create_backend(self.name)
+        self.backend = create_backend(self.name, debug=lambda: self.configs().is_debug)
         self._session = ContextVar("agent_review_session", default=None)
         self._embeddings = None
 
@@ -69,7 +69,7 @@ class AgentEngine:
                 model=self.model,
                 output_schema=schema,
                 read_only=True,
-                persist_history=(self.configs().is_keep_context and
+                persist_history=(bool(self._session.get()) and self.configs().is_keep_context and
                                  self.backend.session_is_private(self._session.get()) is not True),
             ),
             lambda event: None,

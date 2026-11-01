@@ -86,7 +86,7 @@ class AskAiCli(AskAi):
         )
         self._agent_progress = AgentProgress(tf.console, interact)
         taius.interact = self._agent_progress.interact
-        taius.emit = self._agent_progress.emit
+        taius.emit = self._agent_event
         self._startup()
 
     def run(self) -> None:
@@ -101,7 +101,7 @@ class AskAiCli(AskAi):
                 break
             elif output:
                 if getattr(self.mode.processor, "cacheable", True):
-                    cache.save_reply(question, output)
+                    cache.save_reply(self._reply_cache_key, output)
                 cache.save_input_history()
                 # FIXME This is only writing the final answer to the markdown file.
                 with open(self.console_path, "a+", encoding=Charset.UTF_8.val) as f_console:
@@ -162,6 +162,22 @@ class AskAiCli(AskAi):
         """
         return shared.input_text(f"{shared.username}", f"{msg.t('Message')} {self.engine.nickname()}")
 
+    def _agent_event(self, event) -> None:
+        if event.kind == "reasoning_summary":
+            if configs.is_debug:
+                events.reply.emit(reply=AIReply.debug("Debug · Codex: " + event.data["text"]))
+            return
+        self._agent_progress.emit(event)
+        if event.kind != "initial_commentary":
+            return
+        from askai.cli.answer_renderer import render_answer
+        from askai.core.support.text_formatter import text_formatter
+
+        text = event.data["text"]
+        self._agent_progress.present(lambda: render_answer(text_formatter.console, text, f"{self.mode.icon} Taius"))
+        if configs.is_speak:
+            shared.speech.speak(text, lambda error: log.warning("Initial commentary TTS failed: %s", error), wait=False, immediate=True)
+
     def _cb_tts_fallback(self, ev: Event) -> None:
         if not self._ready:
             self._pending_tts_fallback = ev
@@ -214,7 +230,11 @@ class AskAiCli(AskAi):
         :param ev: The event object representing the device change.
         """
         cursor.erase_line()
-        self._reply(AIReply.info(msg.device_switch(str(ev.args.device))))
+        from rich.text import Text
+
+        notice = Text(msg.t("System") + ": ", style="bold yellow")
+        notice.append(msg.translate(msg.device_switch(str(ev.args.device))).strip(), style="default")
+        text_formatter.console.print(notice)
 
     def _splash(self, interval: int = 250) -> None:
         """Display the AskAI splash screen until the system is fully started and ready. This method shows the splash

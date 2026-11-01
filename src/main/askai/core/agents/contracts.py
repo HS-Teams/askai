@@ -41,6 +41,8 @@ class AgentResult:
 
 
 class AgentBackend(Protocol):
+    def archive(self, session: str) -> None: ...
+
     def run(
         self,
         task: AgentTask,

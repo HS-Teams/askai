@@ -55,6 +55,15 @@ class AgentProgress:
                 self._status.start()
                 self._active = True
 
+    def present(self, render):
+        """Print a permanent assistant message outside the live spinner."""
+        self._status.stop()
+        try:
+            render()
+        finally:
+            if self._active:
+                self._status.start()
+
     def interact(self, method, params):
         """Leave the terminal free while a question or approval awaits input."""
         self._status.stop()

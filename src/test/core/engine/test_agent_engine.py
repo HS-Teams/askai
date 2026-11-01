@@ -68,3 +68,22 @@ class AgentEngineTests(unittest.TestCase):
                 )
             engine.complete([])
             self.assertIsNone(backend.run.call_args.args[0].session_id)
+
+    def test_auxiliary_inference_is_ephemeral_and_bound_reviews_preserve_policy(self):
+        with patch('askai.core.engine.agent.agent_engine.create_backend') as factory:
+            backend = factory.return_value
+            backend.run.return_value = AgentResult('s', 't', 'answer', 'completed')
+            engine = AgentEngine('codex')
+            engine.configs = Mock()
+            for history in (True, False):
+                for private in (True, False):
+                    for session in (None, 'bound'):
+                        with self.subTest(history=history, private=private, session=session):
+                            engine.configs.return_value.is_keep_context = history
+                            backend.session_is_private.return_value = private
+                            with engine.use_session(session):
+                                engine.complete([])
+                            task = backend.run.call_args.args[0]
+                            self.assertEqual(task.session_id, session)
+                            self.assertEqual(task.persist_history,
+                                             bool(session) and history and not private)

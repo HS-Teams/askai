@@ -18,9 +18,10 @@ from askai.core.askai_configs import configs
 from askai.core.askai_events import events
 from askai.core.askai_messages import msg
 from askai.core.askai_settings import settings
-from askai.core.commander.commander import ask_commander, RE_ASKAI_CMD
+from askai.core.commander.commander import RE_ASKAI_CMD
 from askai.core.component.cache_service import cache, CACHE_DIR
 from askai.core.engine.ai_engine import AIEngine
+from askai.core.engine.runtime import between_turns
 from askai.core.enums.router_mode import RouterMode
 from askai.core.model.ai_reply import AIReply
 from askai.core.processors.ai_processor import AIProcessor
@@ -29,7 +30,7 @@ from askai.core.support.shared_instances import shared
 from askai.core.support.utilities import read_stdin
 from askai.exception.exceptions import *
 from askai.tui.app_icons import AppIcons
-from click import UsageError
+from click import ClickException, UsageError
 from clitt.core.term.terminal import terminal
 from hspylib.core.enums.charset import Charset
 from hspylib.core.tools.commons import file_is_not_empty, is_debugging
@@ -72,6 +73,8 @@ class AskAi:
         configs.tempo = tempo
 
         self._session_id = now("%Y%m%d")[:8]
+        from askai.core.support.communication import configure_communication
+        configure_communication(self._session_id, lambda: configs.is_keep_context)
         self._engine: AIEngine = shared.create_engine(engine_name, model_name, mode)
         configs.engine = engine_name
         configs.agent = engine_name
@@ -92,7 +95,7 @@ class AskAi:
 
     @property
     def engine(self) -> AIEngine:
-        return self._engine
+        return shared.engine
 
     @property
     def context(self) -> ChatContext:
@@ -155,6 +158,7 @@ class AskAi:
         """Run the application."""
         ...
 
+    @between_turns
     def ask_and_reply(self, question: str) -> tuple[bool, Optional[str]]:
         """Ask the specified question to the AI and provide the reply.
         :param question: The question to ask the AI engine.
@@ -167,20 +171,32 @@ class AskAi:
         assert isinstance(processor, AIProcessor)
 
         try:
+            from askai.core.support.communication import communication
+            communication.publish('user.input', {'message': question})
             if command := re.search(RE_ASKAI_CMD, question):
                 try:
                     args = command_args(command)
                 except ValueError as error:
                     raise UsageError(str(error)) from error
-                ask_commander(args, standalone_mode=False)
+                from askai.core.commander.command_results import execute_command
+                execute_command(args, raise_errors=True)
                 return True, None
             shared.context.push("HISTORY", question)
-            if not getattr(processor, "cacheable", True) or not (output := cache.read_reply(question)):
+            from askai.core.engine.runtime import response_cache_key
+            self._reply_cache_key = response_cache_key(question)
+            if not getattr(processor, "cacheable", True) or not (output := cache.read_reply(self._reply_cache_key)):
                 log.debug('Response not cached. Querying from %s.', self.engine.nickname())
                 events.reply.emit(reply=AIReply.detailed(msg.wait()))
-                if output := processor.process(question, context=read_stdin(), query_prompt=self._query_prompt):
+                from askai.core.commander.agent_commands import command_requests
+                with command_requests() as requested_commands:
+                    output = processor.process(question, context=read_stdin(), query_prompt=self._query_prompt)
+                if output:
                     output = msg.translate_response(output, question)
                     events.reply.emit(reply=AIReply.final(output))
+                for arguments, cancelled in requested_commands:
+                    if not cancelled.is_set():
+                        from askai.core.commander.command_results import execute_command
+                        execute_command(arguments, raise_errors=True)
             else:
                 log.debug("Reply found in cache.")
                 output = msg.translate_response(output, question)
@@ -191,6 +207,8 @@ class AskAi:
             events.reply.emit(reply=AIReply.error(msg.unprocessable(err)))
         except UsageError as err:
             events.reply.emit(reply=AIReply.error(msg.invalid_command(err)))
+        except ClickException as err:
+            events.reply.emit(reply=AIReply.error(msg.t(err.format_message())))
         except IntelligibleAudioError as err:
             events.reply.emit(reply=AIReply.error(msg.intelligible(err)))
         except RateLimitError:

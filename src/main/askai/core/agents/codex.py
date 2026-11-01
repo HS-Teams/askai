@@ -2,6 +2,7 @@
 
 from contextlib import ExitStack
 from askai.core.agents.camera_tool import CAMERA_TOOL, capture_camera
+from askai.core.agents.command_tool import COMMAND_TOOL, askai_command
 from askai.core.agents.identification_tool import IDENTIFICATION_TOOL, identify_camera
 from askai.core.agents.enrollment_tool import ENROLLMENT_TOOL, register_identities
 from askai.core.agents.screenshot_tool import SCREENSHOT_TOOL, capture_screenshot
@@ -26,16 +27,31 @@ class CodexBackend:
         executable: str = "codex",
         timeout: float = 600,
         transport_factory=StdioTransport,
+        debug=lambda: False,
     ):
+        self._debug = debug
         self._private_sessions = set()
         self._model_windows = {}
         self._active_model = None
+        self._context_session = None
+        self._context_usage = None
         self._executable = executable
         self._timeout = timeout
         self._connections = CodexConnections(executable, transport_factory)
 
     def session_is_private(self, session):
         return session in self._private_sessions
+
+    def context_usage(self):
+        return dict(self._context_usage) if self._context_usage is not None else None
+
+    def _update_context_usage(self, session, usage):
+        if session != self._context_session:
+            return
+        used = usage.get('last', {}).get('totalTokens')
+        limit = usage.get('modelContextWindow')
+        if type(used) is int and used >= 0 and positive_integer(limit):
+            self._context_usage = {'used': used, 'limit': limit}
 
     def context_window(self, model=None):
         selected = model or self._active_model
@@ -49,11 +65,45 @@ class CodexBackend:
     def close(self):
         self._connections.close()
 
+    def usage(self):
+        from askai.core.support.usage import codex_usage
+
+        with self._connections.lease(False, actions_allowed=False) as transport:
+            return codex_usage(transport.request("account/rateLimits/read", {}))
+
+    def models(self):
+        models, cursor, seen = [], None, set()
+        with self._connections.lease(False, actions_allowed=False) as transport:
+            while True:
+                page = transport.request('model/list', {'limit': 100, 'cursor': cursor})
+                models.extend({'id': model['model'], 'name': model['displayName'],
+                               'default': model['isDefault']} for model in page['data'])
+                cursor = page.get('nextCursor')
+                if not cursor:
+                    return models
+                if cursor in seen:
+                    raise AgentError('Invalid Codex model pagination')
+                seen.add(cursor)
+
     def compact(self, session, cwd, model=None):
         from askai.core.agents.compaction import compact_thread
 
         with self._connections.lease(True) as transport:
             compact_thread(transport, session, cwd, model)
+        if session == self._context_session:
+            self._context_usage = None
+
+    def archive(self, session):
+        if self.session_is_private(session):
+            if session == self._context_session:
+                self._context_usage = None
+                self._context_session = None
+            return
+        with self._connections.lease(False, actions_allowed=False) as transport:
+            transport.request("thread/archive", {"threadId": session})
+        if session == self._context_session:
+            self._context_usage = None
+            self._context_session = None
 
     def run(
         self, task: AgentTask, emit: Callable, interact: Callable, cancelled: Event
@@ -98,7 +148,7 @@ class CodexBackend:
                     "This storage rule concerns newly generated artifacts, not edits to existing user files."
                 )
             if not task.session_id and not task.read_only:
-                options["dynamicTools"] = [CAMERA_TOOL, SCREENSHOT_TOOL, IDENTIFICATION_TOOL, ENROLLMENT_TOOL]
+                options["dynamicTools"] = [CAMERA_TOOL, SCREENSHOT_TOOL, IDENTIFICATION_TOOL, ENROLLMENT_TOOL, COMMAND_TOOL]
                 bootstrap = (
                     Path(__file__).resolve().parents[2]
                     / "resources/prompts/taius/taius-session-start.txt"
@@ -119,6 +169,9 @@ class CodexBackend:
                 started = transport.request(method, options)
                 session = started["thread"]["id"]
                 self._active_model = started.get("model") or task.model
+            if not task.read_only and session != self._context_session:
+                self._context_session = session
+                self._context_usage = None
             if not task.persist_history:
                 self._private_sessions.add(session)
             if not task.session_id and task.session_name and task.persist_history:
@@ -133,17 +186,21 @@ class CodexBackend:
                 )
             if cancelled.is_set():
                 raise AgentError("Delegation cancelled before starting the turn")
+            self._active_model = task.model or self._active_model
             instruction = stack.enter_context(prepared_input(instruction, self.context_window(self._active_model)))
             turn_options = {
                 "threadId": session,
                 "input": [{"type": "text", "text": instruction}],
             }
+            if task.model:
+                turn_options['model'] = task.model
             if not task.persist_history:
                 turn_options["approvalPolicy"] = "never" if task.read_only else "on-request"
                 turn_options["sandboxPolicy"] = (
                     {"type": "readOnly"} if task.read_only else
                     {"type": "workspaceWrite", "writableRoots": [str(task.cwd.resolve())], "networkAccess": False}
                 )
+            turn_options["summary"] = "auto" if self._debug() else "none"
             turn_options["effort"] = os.getenv("ASKAI_CODEX_REASONING_EFFORT", "low")
             if task.output_schema is not None:
                 turn_options["outputSchema"] = task.output_schema
@@ -156,6 +213,9 @@ class CodexBackend:
         deadline = monotonic() + self._timeout
         interrupted = False
         answers = {}
+        commentary_sent = False
+        from askai.core.agents.reasoning_summaries import ReasoningSummaries
+        summaries = ReasoningSummaries()
         evidence = []
         while monotonic() < deadline:
             if cancelled.is_set() and not interrupted:
@@ -175,7 +235,7 @@ class CodexBackend:
             ):
                 continue
             if "id" in message and method == "item/tool/call":
-                handler = {"capture_camera": capture_camera, "capture_screenshot": capture_screenshot, "identify_camera": identify_camera, "register_identities": register_identities}.get(params.get("tool"))
+                handler = {"capture_camera": capture_camera, "capture_screenshot": capture_screenshot, "identify_camera": identify_camera, "register_identities": register_identities, "askai_command": askai_command}.get(params.get("tool"))
                 if allow_tools and handler is not None and not cancelled.is_set():
                     try:
                         response = handler(params, interact, emit, cancelled)
@@ -190,8 +250,13 @@ class CodexBackend:
                 continue
             if method == "thread/tokenUsage/updated":
                 window = params.get("tokenUsage", {}).get("modelContextWindow")
+                self._update_context_usage(session, params.get('tokenUsage', {}))
                 if positive_integer(window) and self._active_model:
                     self._model_windows[self._active_model] = window
+            elif method == "item/reasoning/summaryTextDelta":
+                if self._debug() and not cancelled.is_set():
+                    for text in summaries.append(params.get("itemId"), params.get("summaryIndex", 0), params.get("delta", "")):
+                        emit(AgentEvent("reasoning_summary", session, turn, {"text": text}))
             elif method == "item/completed":
                 item = params.get("item", {})
                 if (
@@ -199,6 +264,19 @@ class CodexBackend:
                     and item.get("phase") == "final_answer"
                 ):
                     answers[item["id"]] = item["text"]
+                elif item.get("type") == "reasoning":
+                    summary = item.get("summary", [])
+                    if self._debug() and isinstance(summary, list) and not cancelled.is_set():
+                        for text in summaries.complete(item.get("id"), summary):
+                            emit(AgentEvent("reasoning_summary", session, turn, {"text": text}))
+                elif (item.get("type") == "agentMessage" and item.get("phase") == "commentary"
+                      and not commentary_sent and not cancelled.is_set() and item.get("text", "").strip()):
+                    commentary_sent = True
+                    from askai.core.support.communication import communication
+                    communication.publish(
+                        'agent.commentary', {'message': item['text'], 'agent_session_id': session, 'turn_id': turn},
+                        screen=lambda: emit(AgentEvent("initial_commentary", session, turn, {"text": item["text"]})),
+                    )
                 elif item.get("type") in {
                     "commandExecution",
                     "fileChange",

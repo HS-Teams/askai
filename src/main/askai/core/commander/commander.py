@@ -165,6 +165,45 @@ def help(command: str) -> None:
 
 
 @ask_commander.command()
+@click.argument('operation', type=click.Choice(['list', 'set']), default='list')
+@click.argument('name', required=False)
+def engine(operation: str, name: str | None) -> dict:
+    """List engines or switch the active engine between turns, preserving context."""
+    return _runtime_selection('engine', operation, name)
+
+
+@ask_commander.command()
+@click.argument('operation', type=click.Choice(['list', 'set']), default='list')
+@click.argument('name', required=False)
+def model(operation: str, name: str | None) -> dict:
+    """List models for the active engine or select one, preserving context."""
+    return _runtime_selection('model', operation, name)
+
+
+def _runtime_selection(kind, operation, name):
+    from askai.core.engine.runtime import runtime_engines
+
+    if operation == 'set' and not name:
+        raise click.UsageError(f'Usage: /{kind} set <name>')
+    if operation == 'list' and name:
+        raise click.UsageError(f'Usage: /{kind} list')
+    try:
+        runtime = runtime_engines()
+        if operation == 'set':
+            result = runtime.set_engine(name) if kind == 'engine' else runtime.set_model(name)
+        else:
+            result = runtime.engines() if kind == 'engine' else runtime.models()
+        text_formatter.commander_print(f"Engine: `{result['engine']}` · Model: `{result['model']}`")
+        for item in result.get('engines', []):
+            text_formatter.commander_print(item)
+        for item in result.get('models', []):
+            text_formatter.commander_print(f"`{item['id']}` — {item['name']}")
+        return result
+    except Exception as error:
+        raise click.ClickException(str(error)) from error
+
+
+@ask_commander.command()
 @click.argument("operation", type=click.Choice(["reset", "compact"]))
 def session(operation: str) -> None:
     """Reset or compact the current agent session, preserving history and STM.
@@ -385,9 +424,36 @@ def tempo(speed: int | None = None) -> None:
 
 
 @ask_commander.command()
+def usage() -> None:
+    """Show remaining Codex, TTS and translator quotas; local free engines show '-'."""
+    from askai.core.commander.commands.usage_cmd import UsageCmd
+
+    UsageCmd.show()
+
+
+@ask_commander.command()
+def playback() -> None:
+    """Show current audio/video and control play, pause, stop and macOS output volume.
+
+    Closing the mini player leaves playback running. Volume changes affect system output.
+    """
+    import subprocess
+    from askai.cli.playback import show_player, read_playback_key
+    from askai.core.capabilities.media_player import MediaPlayer
+    from askai.core.support.app_paths import askai_data_dir
+    from askai.core.askai_messages import msg
+
+    storage = Path(os.getenv('ASKAI_CAPABILITY_DIR', str(askai_data_dir() / 'cache' / 'capabilities')))
+    try:
+        show_player(MediaPlayer(storage), text_formatter.console, read_playback_key, msg.t)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+        raise click.ClickException(str(error)) from error
+
+
+@ask_commander.command()
 @click.argument("operation", default="list")
 @click.argument("name", nargs=-1)
-def voices(operation: str, name: tuple[str, ...]) -> None:
+def voices(operation: str, name: tuple[str, ...]) -> dict:
     """Manages the active engine speech provider.
     :param operation: The action to perform on voices. Options: [list/set/play]
     :param name: The voice name.
@@ -396,14 +462,15 @@ def voices(operation: str, name: tuple[str, ...]) -> None:
     try:
         match operation.casefold():
             case "list":
-                TtsSttCmd.voice_list()
+                return TtsSttCmd.voice_list()
             case "set":
-                TtsSttCmd.voice_set(voice_name)
+                return TtsSttCmd.voice_set(voice_name)
             case "play":
-                TtsSttCmd.voice_play(voice_name)
+                return TtsSttCmd.voice_play(voice_name)
             case _:
                 err = str(click.BadParameter(f"Invalid voices operation: '{operation}'"))
                 text_formatter.commander_print(f"%RED%{err}%NC%")
+                return {'status': 'failed', 'error': err}
     except (RuntimeError, ValueError) as error:
         raise click.ClickException(str(error)) from error
 
@@ -428,10 +495,19 @@ def tts(texts: tuple[str, ...], dest_dir: str, playback: bool) -> None:
 @ask_commander.command()
 @click.option("--dest-file", type=click.Path(exists=False, file_okay=True, dir_okay=False))
 def dictate(dest_file: str) -> None:
-    """Dictates text and optionally saves it to a file.
-    :param dest_file: The destination file path where the dictated text will be saved, or None if no file is specified.
+    """Dictate continuously, preserve the original and save a refined copy.
+
+    Press Esc or pause for more than 3 seconds to finish and save. Existing files are never overwritten. Without --dest-file,
+    both versions are saved in the AskAI data directory under dictations/.
     """
-    TtsSttCmd.dictate(dest_file)
+    from sqlite3 import Error as DatabaseError
+    from askai.exception.exceptions import InvalidInputDevice, InvalidRecognitionApiError
+
+    try:
+        TtsSttCmd.dictate(dest_file)
+    except (OSError, ValueError, RuntimeError, DatabaseError,
+            InvalidInputDevice, InvalidRecognitionApiError) as error:
+        raise click.ClickException(str(error)) from error
 
 
 @ask_commander.command()
@@ -524,7 +600,7 @@ def mode(router_mode: str) -> None:
 
 
 @ask_commander.command()
-@click.argument("operation", default="")
+@click.argument("operation", default="list")
 @click.argument("args", nargs=-1)
 def rag(operation: str, args: tuple[str, ...]) -> None:
     """Manages AskAI RAG features.

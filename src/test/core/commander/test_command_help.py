@@ -4,13 +4,29 @@ from pathlib import Path
 from string import Template
 from textwrap import dedent
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import click
 from click.testing import CliRunner
 from askai.cli.help_formatter import HelpGroup
 
 
 class CommandHelpTests(unittest.TestCase):
+    def test_runtime_commands_use_list_set_and_return_structured_selection(self):
+        runtime = Mock()
+        result = {'engine': 'codex', 'model': 'model-b', 'changed': True}
+        runtime.set_model.return_value = result
+        runtime.engines.return_value = {'engine': 'codex', 'model': 'model-a', 'engines': ['codex', 'openai']}
+        self.scope['text_formatter'] = Mock()
+        with patch('askai.core.engine.runtime.runtime_engines', return_value=runtime):
+            response = CliRunner().invoke(self.group, ['model', 'set', 'model-b'], standalone_mode=False)
+            self.assertEqual(response.exit_code, 0, response.output)
+            self.assertEqual(response.return_value, result)
+            runtime.set_model.assert_called_once_with('model-b')
+            response = CliRunner().invoke(self.group, ['engine', 'list'], standalone_mode=False)
+            self.assertEqual(response.return_value['engines'], ['codex', 'openai'])
+            for args in (['engine', 'set'], ['model', 'list', 'extra'], ['engine', 'openai']):
+                self.assertNotEqual(CliRunner().invoke(self.group, args).exit_code, 0)
+
     def setUp(self):
         source = Path(__file__).parents[3] / 'main/askai/core/commander/commander.py'
         tree = ast.parse(source.read_text())
@@ -64,3 +80,54 @@ class CommandHelpTests(unittest.TestCase):
         self.group.add_command(click.Command('new-command', help='New registered command'))
         self.assertIn('/new-command', self.scope['commands']())
         self.assertIn('/new-command --help', self.scope['command_suggestions']())
+
+    def test_dictate_options_reach_command_and_help_explains_silence(self):
+        handler = Mock()
+        self.scope['TtsSttCmd'] = handler
+        result = CliRunner().invoke(self.group, [
+            'dictate', '--dest-file', 'notes.txt',
+        ])
+        self.assertEqual(result.exit_code, 0, result.output)
+        handler.dictate.assert_called_once_with('notes.txt')
+        help_result = CliRunner().invoke(self.group, ['dictate', '--help'])
+        self.assertIn('3 seconds', help_result.output)
+
+    def test_dictation_expected_failures_are_command_errors(self):
+        import json
+        import sqlite3
+        from askai.exception.exceptions import InvalidInputDevice, InvalidRecognitionApiError
+
+        errors = [FileExistsError('Already exists'), FileNotFoundError('Missing folder'),
+                  PermissionError('Not writable'), ValueError('Invalid refinement'),
+                  json.JSONDecodeError('Invalid JSON', 'x', 0), RuntimeError('Agent unavailable'),
+                  sqlite3.OperationalError('Database unavailable'),
+                  InvalidInputDevice('No microphone'), InvalidRecognitionApiError('STT unavailable')]
+        for error in errors:
+            with self.subTest(error=type(error).__name__):
+                self.scope['TtsSttCmd'] = Mock()
+                self.scope['TtsSttCmd'].dictate.side_effect = error
+                with self.assertRaises(click.ClickException) as caught:
+                    self.group(['dictate'], standalone_mode=False)
+                self.assertEqual(str(caught.exception), str(error))
+
+    def test_empty_commands_list_or_show_help_without_executing_other_actions(self):
+        for name, command in self.group.commands.items():
+            if name == 'help':
+                continue
+            positional = [p for p in command.params if isinstance(p, click.Argument)]
+            callback = Mock()
+            original = command.callback
+            command.callback = callback
+            try:
+                result = CliRunner().invoke(self.group, [name])
+                self.assertEqual(result.exit_code, 0, (name, result.output, result.exception))
+                if not positional:
+                    callback.assert_called_once()
+                elif positional[0].default == 'list':
+                    callback.assert_called_once()
+                    self.assertEqual(callback.call_args.kwargs[positional[0].name], 'list')
+                else:
+                    callback.assert_not_called()
+                    self.assertIn('--help', result.output)
+            finally:
+                command.callback = original

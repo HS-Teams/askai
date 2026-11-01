@@ -31,7 +31,8 @@ class CodexTests(unittest.TestCase):
             [
                 {
                     "method": "item/completed",
-                    "params": {"item": {"type": "reasoning", "text": "private"}},
+                    "params": {"item": {"type": "reasoning", "text": "private",
+                                        "content": ["raw private"], "summary": ["Checking sources."]}},
                 },
                 {
                     "method": "item/completed",
@@ -43,6 +44,11 @@ class CodexTests(unittest.TestCase):
                             "text": "working",
                         }
                     },
+                },
+                {
+                    "method": "item/completed",
+                    "params": {"item": {"type": "agentMessage", "id": "later",
+                                        "phase": "commentary", "text": "Later update"}},
                 },
                 {
                     "id": 99,
@@ -66,7 +72,7 @@ class CodexTests(unittest.TestCase):
                 },
             ]
         )
-        backend = CodexBackend(transport_factory=lambda command: transport)
+        backend = CodexBackend(transport_factory=lambda command: transport, debug=lambda: True)
         events = []
         result = backend.run(
             AgentTask("Inspect", Path.cwd()),
@@ -75,7 +81,9 @@ class CodexTests(unittest.TestCase):
             Event(),
         )
         self.assertEqual(result.answer, "Done")
-        self.assertEqual([e.kind for e in events], ["started", "completed"])
+        self.assertEqual(events[1].data, {"text": "Checking sources."})
+        self.assertEqual(events[2].data, {"text": "working"})
+        self.assertEqual([e.kind for e in events], ["started", "reasoning_summary", "initial_commentary", "completed"])
         transport.send.assert_any_call({"id": 99, "result": {"decision": "decline"}})
         transport.__exit__.assert_not_called()
         backend.close()
@@ -94,6 +102,7 @@ class CodexTests(unittest.TestCase):
             if call.args[0] == "turn/start"
         )
         self.assertEqual(turn["effort"], "low")
+        self.assertEqual(turn["summary"], "auto")
 
     def test_cancel_is_confirmed_by_terminal_event(self):
         transport = self.transport(
@@ -220,3 +229,20 @@ class DailySessionTests(unittest.TestCase):
                         "capture_camera",
                     ):
                         self.assertIn(tool + "(", options["developerInstructions"])
+
+    def test_archive_uses_protocol_without_starting_a_turn(self):
+        transport = self.transport([])
+        transport.request.side_effect = None
+        transport.request.return_value = {'account': {'type': 'chatgpt'}}
+        backend = CodexBackend(transport_factory=Mock(return_value=transport))
+        self.addCleanup(backend.close)
+        backend.archive('previous')
+        transport.request.assert_any_call('thread/archive', {'threadId': 'previous'})
+        self.assertNotIn('turn/start', [c.args[0] for c in transport.request.call_args_list])
+
+    def test_private_session_has_no_persisted_thread_to_archive(self):
+        factory = Mock()
+        backend = CodexBackend(transport_factory=factory)
+        backend._private_sessions.add('private')
+        backend.archive('private')
+        factory.assert_not_called()

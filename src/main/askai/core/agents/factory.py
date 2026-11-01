@@ -13,10 +13,10 @@ def normalize_agent(name: str) -> str:
     return name
 
 
-def create_backend(name: str):
+def create_backend(name: str, *, debug=lambda: False):
     name = normalize_agent(name)
     if name == "codex":
-        return CodexBackend()
+        return CodexBackend(debug=debug)
     raise AgentError(
         f"The {name.title()} adapter is not implemented yet. No other agent was started."
     )

@@ -29,6 +29,16 @@ def color_help(text: str) -> str:
 
 
 class HelpCommand(click.Command):
+    def parse_args(self, ctx, args):
+        positional = [param for param in self.params if isinstance(param, click.Argument)]
+        if not args and positional:
+            first = positional[0]
+            has_list = first.default == 'list' or (
+                isinstance(first.type, click.Choice) and 'list' in first.type.choices
+            )
+            args = ['list'] if has_list else ['--help']
+        return super().parse_args(ctx, args)
+
     def get_help(self, ctx):
         return color_help(super().get_help(ctx))
 

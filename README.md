@@ -286,3 +286,70 @@ restarts is pending. The old function-call executor and framework dependencies
 have been removed. Existing document indexes are left intact; native retrieval
 uses a separate index namespace and rebuilds from source documents on first use.
 Audio caching and voice selection remain unchanged.
+
+### AskAI commands through conversation
+
+In Taius mode, spoken or typed requests such as "slash help", "barra help" or
+"ative o ditado" can invoke the current app's commands. Codex has a compact
+`askai_command` tool and requests the command catalogue or individual help only
+when needed; the full help is not included in the initial context.
+
+The tool returns live app state, zero-based voice catalogues and structured command
+results with status, data and console output. Voice queries and selection run in
+the current turn, so Codex can resolve "voice 12" without asking for its name.
+Commands involving another inference or session/router changes (camera, dictation,
+summarization, session, mode and usage) run after the agent turn ends. Their results
+are available through `action=state` on the next turn. Direct slash commands use
+the same result store. The app still displays command output and errors.
+Codex consults current state first. After failures it uses `action=diagnostics`
+for bounded, current-process command failure logs; logs never establish current
+state or voice indices. Returned console output is limited to 16,000 characters
+with an explicit truncation flag.
+No second AskAI instance is launched. Cancellation prevents queued commands from
+running. Commands retain their existing interaction and permission checks;
+permission changes and factory settings reset must be performed directly by the
+user with slash commands. Restart AskAI and use `/session reset` for an existing
+Codex session to receive the new tool and orientation.
+
+### Communication bus
+
+User input, assistant replies, initial agent commentary and command results share
+one communication bus. Each message carries an ID, UTC timestamp, application
+session ID, kind and structured payload. CLI/TUI delivery uses the existing views;
+command output remains visible live. Output chunks go only to the screen, while
+the completed result is recorded once with its captured output.
+
+The bus keeps the latest 100 messages in the running session. Codex can inspect
+recent messages with `askai_command` using `action=state`. Command result queries
+return at most ten results; diagnostics include destination delivery failures.
+When conversation history is enabled, messages are also appended to
+`${ASKAI_DIR}/sessions/communication/<session>-<run-id>.jsonl` and the normal
+application log. With history disabled, payloads stay in memory and on screen;
+the bus writes neither journal entries nor message payloads to the log. Failed
+destinations are reported independently and do not stop the remaining deliveries.
+Restart AskAI after updating to initialize the bus for the application session.
+
+### Switch engine and model without restarting
+
+```text
+/engine list
+/engine set codex
+/model list
+/model set <model-id-from-the-list>
+```
+
+`/engine list` shows the implemented engines (Codex and OpenAI). `/model list`
+queries Codex's model catalogue, or lists the OpenAI models supported by AskAI.
+Switches run between turns and keep the existing conversation context, STM,
+speech providers and routing mode. Codex model changes also preserve its native
+session and connection. Engine instances are retained during the running app,
+so switching back to Codex reuses its connection and sessions. Each engine keeps
+its saved model. Failed construction or invalid selection keeps the active engine.
+
+OpenAI currently supports Chat/RAG; enter `/mode chat` or `/mode rag` before
+`/engine set openai`. Taius orchestration requires Codex. Requests made through
+`askai_command` queue engine/model commands until the agent turn finishes.
+The communication bus carries the structured selection result and console output.
+Response-cache identities include engine, model and mode; indexes are reopened
+for the selected embedding space when needed. Context is retained without
+truncation, so the selected model's context-window limits still apply.
