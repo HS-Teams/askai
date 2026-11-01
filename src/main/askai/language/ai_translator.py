@@ -85,3 +85,8 @@ class AITranslator(ABC):
         :return: The name or model of the translator.
         """
         ...
+
+    def usage(self):
+        from askai.core.support.usage import Usage
+
+        return [Usage(self.name(), '-')]

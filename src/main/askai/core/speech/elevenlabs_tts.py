@@ -37,6 +37,15 @@ class ElevenLabsTTS:
     def voice(self):
         return self._settings.get('askai.elevenlabs.tts.voice') or ''
 
+    @property
+    def voice_name(self):
+        if not self.voice:
+            return ''
+        for label, voice_id in (self._voices or {}).items():
+            if voice_id == self.voice:
+                return label.removesuffix(f' [{voice_id}]')
+        return self.voice
+
     def _call(self, method, endpoint, **kwargs):
         key = os.getenv('ELEVENLABS_API_KEY')
         if not key:
@@ -107,6 +116,12 @@ class ElevenLabsTTS:
             raise ValueError('Unknown ElevenLabs voice')
         self._settings.put('askai.elevenlabs.tts.voice', selected)
 
+    def usage(self):
+        from askai.core.support.usage import elevenlabs_usage
+
+        with self._call('GET', '/v1/user/subscription') as response:
+            return elevenlabs_usage(response.json())
+
     def probe(self):
         if not self.voice:
             self.voices()
@@ -116,6 +131,13 @@ class ElevenLabsTTS:
         # A real, tiny request at setup validates authentication, voice and quota.
         with NamedTemporaryFile(suffix='.wav') as sample:
             self._generate(self.PROBE_TEXT, self.voice, Path(sample.name))
+        if self._voices is None:
+            import logging
+
+            try:
+                self.voices()
+            except (AgentError, OSError, ValueError, KeyError, TypeError) as error:
+                logging.warning('Could not load ElevenLabs voice names: %s', error)
 
     def _path(self, text, voice):
         identity = f'elevenlabs:{self.model_name}:{voice}:pcm_{self.SAMPLE_RATE}:' + sha256(text.encode()).hexdigest()

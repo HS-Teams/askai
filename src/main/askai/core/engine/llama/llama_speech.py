@@ -19,6 +19,11 @@ class LlamaSpeech:
     def voice(self) -> str:
         return self._configs.tts_voice
 
+    def usage(self):
+        from askai.core.support.usage import Usage
+
+        return [Usage('Ollama', '-')]
+
     def voices(self) -> list[str]:
         return self._client.show(self.model_name).get("voices", [])
 

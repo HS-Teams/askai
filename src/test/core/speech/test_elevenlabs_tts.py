@@ -36,6 +36,29 @@ class ElevenLabsTests(unittest.TestCase):
         path = self.root / (sha256((text + identity).encode()).hexdigest() + '.' + extension)
         return str(path), path.exists()
 
+    def test_display_name_resolves_selected_id_without_changing_synthesis_voice(self):
+        self.response.json.return_value = {'voices': [{'name': 'Friendly Voice', 'voice_id': 'voice1'}], 'has_more': False}
+        self.engine.voices()
+        self.assertEqual(self.engine.voice_name, 'Friendly Voice')
+        self.assertEqual(self.engine.voice, 'voice1')
+        self.assertEqual(self.engine.voice_name, 'Friendly Voice')
+        self.request.assert_called_once()
+
+    def test_display_name_uses_id_without_network_when_catalogue_is_unavailable(self):
+        self.request.side_effect = OSError('offline')
+        self.assertEqual(self.engine.voice_name, 'voice1')
+        self.engine._voices = {'Other [other]': 'other'}
+        self.assertEqual(self.engine.voice_name, 'voice1')
+        self.request.assert_not_called()
+
+    def test_local_active_voice_name_is_preserved_during_fallback(self):
+        primary = Mock()
+        primary.probe.side_effect = AgentError('offline')
+        from types import SimpleNamespace
+        local = SimpleNamespace(voice='Grub the Ogre')
+        wrapper = FallbackTTS(primary, lambda: local, Mock())
+        self.assertEqual(wrapper.voice_name, 'Grub the Ogre')
+
     def test_v4_is_default_and_preserves_delivery_cues_with_distinct_cache(self):
         self.assertEqual(self.engine.model_name, 'eleven_v4')
         text = '[happy] Ola!'
@@ -69,8 +92,9 @@ class ElevenLabsTests(unittest.TestCase):
         self.assertEqual(self.engine.voice, 'voice1')
 
     def test_probe_is_real_and_does_not_play_or_publish_cache(self):
+        self.response.json.return_value = {'voices': [{'name': 'Voice', 'voice_id': 'voice1'}], 'has_more': False}
         self.engine.probe()
-        self.request.assert_called_once()
+        self.assertEqual([call.args[0] for call in self.request.call_args_list], ['POST', 'GET'])
         self.cache.audio_file_path.assert_not_called()
         self.assertEqual(list(self.root.iterdir()), [])
 
@@ -254,3 +278,24 @@ class ElevenLabsTests(unittest.TestCase):
         factory.assert_not_called()
         notify.assert_not_called()
         self.assertEqual(wrapper.provider_name, 'ElevenLabs')
+
+    def test_startup_loads_name_for_previously_selected_voice(self):
+        self.engine._generate = Mock()
+        self.response.json.return_value = {
+            'voices': [{'name': 'Friendly Voice', 'voice_id': 'voice1'}], 'has_more': False,
+        }
+        self.engine.probe()
+        self.assertEqual(self.engine.voice_name, 'Friendly Voice')
+        self.assertEqual(self.engine.voice, 'voice1')
+        self.assertEqual(self.request.call_args.args[:2],
+                         ('GET', 'https://api.elevenlabs.io/v2/voices'))
+        self.request.reset_mock()
+        self.assertEqual(self.engine.voice_name, 'Friendly Voice')
+        self.request.assert_not_called()
+
+    def test_catalogue_failure_does_not_fail_successful_speech_probe(self):
+        self.engine._generate = Mock()
+        self.engine.voices = Mock(side_effect=AgentError('catalogue unavailable'))
+        self.engine.probe()
+        self.engine._generate.assert_called_once()
+        self.assertEqual(self.engine.voice, 'voice1')

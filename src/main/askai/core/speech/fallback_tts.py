@@ -51,9 +51,18 @@ class FallbackTTS:
         return self._active.voice
 
     @property
+    def voice_name(self):
+        self.initialize()
+        return getattr(self._active, 'voice_name', self._active.voice)
+
+    @property
     def voice_engine(self):
         """Voice management always targets the configured provider."""
         return self._primary
+
+    def usage(self):
+        # Query the configured paid provider even while local fallback is active.
+        return self._primary.usage()
 
     def voices(self):
         return self._primary.voices()

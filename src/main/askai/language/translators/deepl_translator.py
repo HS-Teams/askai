@@ -51,6 +51,18 @@ class DeepLTranslator(AITranslator):
     def name(self) -> str:
         return "DeepL"
 
+    def usage(self):
+        from askai.core.support.usage import deepl_usage
+
+        if not self._translator:
+            API_KEYS.ensure("DEEPL_API_KEY", "DeepLTranslator")
+            self._translator = deepl.Translator(API_KEYS.DEEPL_API_KEY)
+        try:
+            quota = self._translator.get_usage().character
+        except deepl.DeepLException as error:
+            raise RuntimeError(str(error)) from error
+        return deepl_usage(quota)
+
     def _from_locale(self) -> tuple[str, ...]:
         """Convert from locale string to DeepL language.
         Ref:.https://developers.deepl.com/docs/resources/supported-languages
