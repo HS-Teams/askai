@@ -142,7 +142,8 @@ class HeaderNotifications(Widget):
 
     def __str__(self):
         device_info: str = f"{recorder.input_device[1]}" if recorder.input_device else "-"
-        voice: str = shared.speech.tts.voice
+        speech = shared.speech.tts
+        voice: str = getattr(speech, 'voice_name', speech.voice)
         from askai.core.askai_messages import msg
         reason = getattr(shared.speech.tts, "failure_reason", None)
         tts_details = ("\n" + msg.t("TTS fallback reason") + ": " + msg.t(reason)) if reason else ""
@@ -166,6 +167,9 @@ class HeaderNotifications(Widget):
 
     def render(self) -> RenderResult:
         """Render the header notifications."""
+        from askai.core.support.context_usage import context_label
+        from askai.core.askai_messages import msg
+
         return Text(
             f"{AppIcons.HEADPHONES if self.headphones else AppIcons.BUILT_IN_SPEAKER}  "
             f"{AppIcons.LISTENING_ON if self.listening else AppIcons.LISTENING_OFF}  "
@@ -173,7 +177,7 @@ class HeaderNotifications(Widget):
             f"{AppIcons.ASSISTIVE_ON if self.assistive else AppIcons.ASSISTIVE_OFF}  "
             f"{AppIcons.CACHING_ON if self.caching else AppIcons.CACHING_OFF} "
             f"{AppIcons.DEBUG_ON if self.debugging else AppIcons.DEBUG_OFF}  "
-            f"{AppIcons.SEPARATOR_V} {now(f'%a %d %b %X')}",
+            f"{AppIcons.SEPARATOR_V} {now(f'%a %d %b %X')} · {context_label(shared.engine, msg.t)}",
             no_wrap=True,
             overflow="ellipsis",
         )
