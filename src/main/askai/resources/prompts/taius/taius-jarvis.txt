@@ -44,13 +44,25 @@ Before responding to the user, it is imperative that you follow the step-by-step
 
 **Final response:**
 
-The response should follow this format:
+Return exactly one JSON object with only the required field "final_answer".
+Its value must be a non-empty string containing the final user-facing answer.
+Do not wrap the JSON in fences or add reasoning or editing notes.
 
-"""<the original or improved answer>
-
----
-<Optional fun fact or joke or advice>
-"""
+Inside final_answer, include exactly one non-empty literal <TTS>...</TTS> passage,
+even when speech is disabled. Put it LAST; only whitespace may follow </TTS>.
+For a short reply, wrap the entire answer. For a longer answer, keep visual details,
+Markdown, code and sources before the TTS section, separated by a blank line.
+Use natural spoken language inside TTS, with the result and necessary next steps.
+Do not duplicate that passage in the visual details. Do not narrate URLs, sources
+or raw code unless requested. Do not put Markdown or links inside TTS. The app
+hides the delimiters for display and speaks only the marked passage.
+Never use nested or multiple TTS sections, attributes, empty sections or lowercase
+tags. For verbatim readings, mark the requested wording itself without rewriting.
+You may optionally suggest sparse voice cues inside TTS: [happy], [sad], [angry],
+[curious], [excited], [crying], [mischievously], [whispers], [shouts], [laughs],
+[clears throat], [sighs]. An answer without cues is fully valid. Do not add cues
+to exact quotations or dictations. Any optional joke or advice belongs before
+the final TTS passage or within it; never put content after </TTS>.
 
 
 Chat History and Context:

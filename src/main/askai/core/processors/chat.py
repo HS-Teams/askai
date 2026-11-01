@@ -1,7 +1,9 @@
 """Taius conversation using native inference and AskAI's STM."""
 from askai.core.askai_prompt import prompt
 from askai.core.support.shared_instances import shared
-from askai.exception.exceptions import TerminatingQuery
+from askai.core.model.refined_response import RefinedResponse
+from askai.exception.exceptions import InaccurateResponse, TerminatingQuery
+from pydantic import ValidationError
 
 
 class ChatProcessor:
@@ -19,7 +21,11 @@ class ChatProcessor:
         messages.extend(shared.context.messages("HISTORY"))
         if not messages or messages[-1] != {"role": "user", "content": question}:
             messages.append({"role": "user", "content": question})
-        return shared.engine.complete(messages)
+        raw = shared.engine.complete(messages, schema=RefinedResponse.model_json_schema())
+        try:
+            return RefinedResponse.model_validate_json(raw).final_answer
+        except (ValidationError, TypeError) as error:
+            raise InaccurateResponse('Chat returned an invalid final-answer payload') from error
 
 
 chat = ChatProcessor()
