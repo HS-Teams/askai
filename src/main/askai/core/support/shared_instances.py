@@ -27,7 +27,7 @@ from askai.core.engine.engine_factory import EngineFactory
 from askai.core.support.chat_context import ChatContext, ContextEntry
 from askai.core.support.utilities import display_text
 from clitt.core.term.terminal import terminal
-from clitt.core.tui.line_input.line_input import line_input
+from askai.cli.prompt_input import line_input
 from hspylib.core.metaclass.singleton import Singleton
 from hspylib.core.preconditions import check_state
 from hspylib.core.tools.text_tools import elide_text
@@ -225,7 +225,7 @@ class SharedInstances(metaclass=Singleton):
         if self._engine is not None:
             self._engine.backend.close()
 
-    def input_text(self, input_prompt: str, placeholder: str | None = None) -> Optional[str]:
+    def input_text(self, input_prompt: str, placeholder: str | None = None, *, allow_voice=False) -> Optional[str]:
         """Prompt the user for input.
         :param input_prompt: The text prompt to display to the user.
         :param placeholder: The placeholder text to display in the input field (optional).
@@ -233,7 +233,7 @@ class SharedInstances(metaclass=Singleton):
         """
         ret = None
         while ret is None:
-            if (ret := line_input(input_prompt, placeholder)) == Keyboard.VK_CTRL_L:  # Use voice input.
+            if (ret := line_input(input_prompt, placeholder, allow_voice=allow_voice)) == Keyboard.VK_CTRL_L:  # Use voice input.
                 terminal.cursor.erase_line()
                 if spoken_text := self.listen():
                     display_text(f"{self.username}: {spoken_text}")

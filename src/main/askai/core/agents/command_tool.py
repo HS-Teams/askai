@@ -8,7 +8,7 @@ from askai.core.commander.command_results import (
 
 
 # These callbacks invoke inference or change the active session/router.
-DEFERRED_COMMANDS = {'camera', 'dictate', 'summarize', 'session', 'mode', 'usage', 'engine', 'model'}
+DEFERRED_COMMANDS = {'camera', 'dictate', 'summarize', 'session', 'mode', 'usage', 'engine', 'model', 'gestures'}
 
 
 COMMAND_TOOL = {

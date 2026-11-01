@@ -21,6 +21,8 @@ from askai.core.support.communication import ReplyChannel
 
 ASKAI_BUS_NAME: str = "askai-reply-bus"
 
+VOICE_INPUT_EVENT = "askai-voice-input-event"
+
 TTS_FALLBACK_EVENT: str = "askai-tts-fallback-event"
 
 ABORT_EVENT: str = "askai-abort-event"
@@ -41,6 +43,7 @@ class AskAiEvents(Enumeration):
     ASKAI_BUS = FluidEventBus(
         ASKAI_BUS_NAME,
         tts_fallback=FluidEvent(TTS_FALLBACK_EVENT, provider="", reason=""),
+        voice_input=FluidEvent(VOICE_INPUT_EVENT),
         abort=FluidEvent(ABORT_EVENT, message=None),
         reply=FluidEvent(REPLY_EVENT, erase_last=False),
         listening=FluidEvent(MIC_LISTENING_EVENT, listening=True, text=""),

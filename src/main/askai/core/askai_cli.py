@@ -71,7 +71,7 @@ class AskAiCli(AskAi):
         from askai.core.processors.taius import taius
         from askai.cli.agent_interaction import AgentInteraction
         from askai.cli.agent_progress import AgentProgress
-        from askai.cli.confirmation import Confirmation, show_confirmation
+        from askai.cli.confirmation import Confirmation, show_confirmation, read_confirmation_key
         from askai.core.support.text_formatter import text_formatter as tf
 
         interact = AgentInteraction(
@@ -79,9 +79,10 @@ class AskAiCli(AskAi):
             lambda text: display_text(text, shared.nickname, markdown=False),
             translate=msg.translate,
             confirm=Confirmation(
-                lambda placeholder: shared.input_text("⚠ " + msg.t("Confirmation") + " › ", placeholder),
-                lambda message: show_confirmation(tf.console, message, msg.translate),
+                read_confirmation_key,
+                lambda message, grants=(): show_confirmation(tf.console, message, msg.translate, grants),
                 translate=msg.translate,
+                echo=lambda text: display_text(text, shared.username, markdown=False),
             ),
         )
         self._agent_progress = AgentProgress(tf.console, interact)
@@ -160,7 +161,7 @@ class AskAiCli(AskAi):
         """Read the user input from stdin.
         :return: The user's input as a string, or None if no input is provided.
         """
-        return shared.input_text(f"{shared.username}", f"{msg.t('Message')} {self.engine.nickname()}")
+        return shared.input_text(f"{shared.username}", f"{msg.t('Message')} {self.engine.nickname()}", allow_voice=True)
 
     def _agent_event(self, event) -> None:
         if event.kind == "reasoning_summary":
@@ -188,7 +189,16 @@ class AskAiCli(AskAi):
         )
         display_text(f"%YELLOW%{message}%NC%", "⚠ " + msg.t("Warning") + " · TTS: ", markdown=False)
 
+    def _cb_voice_input(self, ev: Event) -> None:
+        from askai.cli.prompt_input import request_voice
+        if not request_voice():
+            log.debug('Gesture voice input ignored: no empty question prompt is active')
+
     def _cb_reply_event(self, ev: Event) -> None:
+        from askai.cli.prompt_input import present
+        present(lambda: self._display_reply_event(ev))
+
+    def _display_reply_event(self, ev: Event) -> None:
         """Callback to handle reply events.
         :param ev: The event object representing the reply event.
         """
@@ -229,12 +239,13 @@ class AskAiCli(AskAi):
         """Callback to handle audio input device change events.
         :param ev: The event object representing the device change.
         """
-        cursor.erase_line()
         from rich.text import Text
+        from askai.core.support.text_formatter import text_formatter
+        from askai.cli.prompt_input import present
 
         notice = Text(msg.t("System") + ": ", style="bold yellow")
         notice.append(msg.translate(msg.device_switch(str(ev.args.device))).strip(), style="default")
-        text_formatter.console.print(notice)
+        present(lambda: text_formatter.console.print(notice))
 
     def _splash(self, interval: int = 250) -> None:
         """Display the AskAI splash screen until the system is fully started and ready. This method shows the splash
@@ -263,6 +274,7 @@ class AskAiCli(AskAi):
         ]
         # Start and manage the progress bar
         askai_bus = AskAiEvents.bus(ASKAI_BUS_NAME)
+        askai_bus.subscribe(VOICE_INPUT_EVENT, self._cb_voice_input)
         askai_bus.subscribe(REPLY_EVENT, self._cb_reply_event)
         askai_bus.subscribe(TTS_FALLBACK_EVENT, self._cb_tts_fallback)
         if configs.is_interactive:

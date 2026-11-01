@@ -3,7 +3,7 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 class DeviceNotificationTests(unittest.TestCase):
@@ -18,10 +18,19 @@ class DeviceNotificationTests(unittest.TestCase):
                                       device_switch=lambda s: '\nDispositivo: ' + s + '\n',
                                       translate=lambda s: s)
                 scope = dict(Event=object, cursor=Mock(), msg=msg,
-                             text_formatter=formatter, shared=shared)
+                             shared=shared)
                 module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
                 exec(compile(module, str(path), 'exec'), scope)
-                scope[method.name](view, SimpleNamespace(args=SimpleNamespace(device=(1, 'Microphone'))))
+                pending = []
+                with patch.dict('sys.modules', {
+                    'askai.core.support.text_formatter': SimpleNamespace(text_formatter=formatter),
+                    'askai.cli.prompt_input': SimpleNamespace(present=pending.append),
+                }):
+                    scope[method.name](view, SimpleNamespace(args=SimpleNamespace(device=(1, 'Microphone'))))
+                if filename.startswith('core'):
+                    formatter.console.print.assert_not_called()
+                    self.assertEqual(len(pending), 1)
+                    pending[0]()
                 view._reply.assert_not_called()
                 shared.speech.speak.assert_not_called()
                 if filename.startswith('core'):

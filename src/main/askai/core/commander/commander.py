@@ -451,6 +451,17 @@ def playback() -> None:
 
 
 @ask_commander.command()
+@click.option('--camera-index', type=click.IntRange(min=0), default=0, show_default=True)
+def gestures(camera_index: int) -> dict:
+    """Preview hand gestures, move the mouse and pinch to click. Esc stops; no video is recorded."""
+    from askai.gestures.command import start
+    try:
+        return start(camera_index)
+    except Exception as error:
+        raise click.ClickException(str(error)) from error
+
+
+@ask_commander.command()
 @click.argument("operation", default="list")
 @click.argument("name", nargs=-1)
 def voices(operation: str, name: tuple[str, ...]) -> dict:

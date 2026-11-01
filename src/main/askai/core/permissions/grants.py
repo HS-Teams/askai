@@ -8,8 +8,13 @@ from askai.core.agents.elicitation import ELICITATION_METHOD, validate_reply
 
 PREFIX = 'askai.grants.'
 GRANTS = {
+    'microphone.listen.local': 'Activate AskAI voice input using hand gestures',
     'camera.capture.local': 'Capture a local camera photo',
     'camera.preview.local': 'Open the camera preview',
+    'desktop.pointer.move': 'Move the mouse pointer using local hand gestures',
+    'desktop.keyboard.escape': 'Send Escape to the focused application using hand gestures',
+    'desktop.pointer.scroll': 'Scroll using local hand gestures',
+    'desktop.pointer.click': 'Click using local hand gestures',
     'screen.capture.local': 'Capture the local screen',
     'vision.share.agent': 'Share a captured image with the agent',
     'images.read.local': 'Read photos and open numbered previews for enrollment',
@@ -96,9 +101,11 @@ class GrantPolicy:
         return pending
 
     def authorize(self, names, message, interact) -> bool:
-        if not self.pending(names):
+        pending = self.pending(names)
+        if not pending:
             return True
         request = self.request(message)
+        request["askaiGrants"] = pending
         response = interact(ELICITATION_METHOD, request)
         validate_reply(request, response)
         self.pending(names)
