@@ -131,10 +131,13 @@ class SharedInstances(metaclass=Singleton):
         device_info = f"{recorder.input_device[1]}" if recorder.input_device else ""
         device_info += f", %YELLOW%AUTO-SWAP {'%GREEN%' if recorder.is_auto_swap else '%RED%'}"
         dtm = f" {geo_location.datetime} "
-        speak_info = str(configs.tempo) + " @" + self.speech.tts.voice
+        speech = self.speech.tts
+        speak_info = str(configs.tempo) + " @" + getattr(speech, 'voice_name', speech.voice)
         cur_dir = elide_text(str(Path(os.getcwd()).absolute()), 67, "…")
         translator = f"translated by '{msg.translator.name()}'" if configs.language.name.title() != "English" else ""
         eng: AIEngine = shared.engine
+        from askai.core.support.context_usage import context_label
+        context_info = context_label(eng, msg.t)
         capacity = eng.ai_token_limit()
         capacity_label = compact_count(capacity) if capacity is not None else msg.t("Not reported")
         model_info: str = f"'{eng.ai_model_name()}'%YELLOW% {capacity_label}%GREEN% tokens"
@@ -152,6 +155,7 @@ class SharedInstances(metaclass=Singleton):
                Language: {configs.language} {translator}
                Location: {' , ' + geo_location.location if configs.ip_api_enabled else '%RED% '} %GREEN%
                  Engine: {engine_info}
+                {context_info}
                    Mode: %CYAN%{self.mode}%GREEN%, %YELLOW%RAG: {rag_info}, %YELLOW%Assistive: {assist_info}%GREEN%
                     Dir: {cur_dir}
                      OS: {prompt.os_type}/{prompt.shell}
@@ -193,6 +197,11 @@ class SharedInstances(metaclass=Singleton):
                     ctx = self._context.store["HISTORY"]
                     ctx.append(ContextEntry(role, content))
         return self._context
+
+    def replace_engine(self, engine, token_limit):
+        if self._context is not None:
+            self._context.update_token_limit(token_limit)
+        self._engine = EngineFactory.activate(engine)
 
     def create_memory(self, memory_key: str = "chat_history") -> ShortTermMemory:
         """Create or retrieve the conversation window memory.

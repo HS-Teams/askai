@@ -14,6 +14,7 @@ class Summarizer:
         self._index = None
         self._folder = ""
         self._glob = ""
+        self._embedding_key = None
 
     @property
     def folder(self):
@@ -42,14 +43,19 @@ class Summarizer:
             index.replace(chunk_documents(documents, configs.chunk_size, configs.chunk_overlap))
             manifest.write_text(fingerprint)
         self._index, self._folder, self._glob = index, str(folder), glob
+        self._embedding_key = shared.engine.embedding_key()
         return True
 
     def exists(self, folder, glob: str) -> bool:
-        return self._index is not None and self._folder == str(folder) and self._glob == glob
+        from askai.core.support.shared_instances import shared
+        return (self._index is not None and self._folder == str(folder) and self._glob == glob
+                and self._embedding_key == shared.engine.embedding_key())
 
     def retrieve(self, query: str) -> str:
         if self._index is None:
             raise DocumentsNotFound("Load a document collection before querying")
+        if not self.exists(self._folder, self._glob):
+            self.generate(self._folder, self._glob)
         return "\n\n".join(f"Source: {doc.metadata.get('source', '')}\n{doc.page_content}"
                            for doc in self._index.search(query, configs.rag_retrival_amount))
 

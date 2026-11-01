@@ -30,6 +30,20 @@ class EngineFactory(metaclass=Singleton):
 
     @classmethod
     def create_engine(cls, engine_name: str | list[str], engine_model: str | list[str] | None = None) -> AIEngine:
+        name = engine_name[0] if isinstance(engine_name, list) else engine_name
+        if name.casefold() == 'openai':
+            from askai.core.model.api_keys import ApiKeys
+            if not ApiKeys().has_key('OPENAI_API_KEY'):
+                ApiKeys.prompt()
+        return cls.activate(cls.build_engine(engine_name, engine_model))
+
+    @classmethod
+    def activate(cls, engine):
+        cls._ACTIVE_AI_ENGINE = engine
+        return engine
+
+    @classmethod
+    def build_engine(cls, engine_name: str | list[str], engine_model: str | list[str] | None = None) -> AIEngine:
         """Create the suitable AI engine according to the provided engine name.
         :param engine_name: The AI engine name(s).
         :param engine_model: The AI engine model(s).
@@ -40,23 +54,18 @@ class EngineFactory(metaclass=Singleton):
         match engine_name:
             case "codex" | "claude" | "cursor":
                 from askai.core.engine.agent.agent_engine import AgentEngine
-                cls._ACTIVE_AI_ENGINE = AgentEngine(engine_name, model_name)
+                return AgentEngine(engine_name, model_name)
             case "openai":
                 from askai.core.engine.openai.openai_engine import OpenAIEngine
                 from askai.core.model.api_keys import ApiKeys
 
-                keys = ApiKeys()
-                if not keys.has_key("OPENAI_API_KEY"):
-                    ApiKeys.prompt()
-                    ApiKeys().ensure("OPENAI_API_KEY", "OpenAIEngine")
+                ApiKeys().ensure("OPENAI_API_KEY", "OpenAIEngine")
                 model: AIModel = OpenAIModel.of_name(model_name) if model_name else None
-                cls._ACTIVE_AI_ENGINE = OpenAIEngine(model or OpenAIModel.GPT_4_O_MINI)
+                return OpenAIEngine(model or OpenAIModel.GPT_4_O_MINI)
             case "gemini":
                 raise NoSuchEngineError("Google 'gemini' is not yet implemented!")
             case _:
                 raise NoSuchEngineError(f"Engine name: {engine_name}  model: {engine_model}")
-
-        return cls._ACTIVE_AI_ENGINE
 
     @classmethod
     def active_ai(cls) -> AIEngine:

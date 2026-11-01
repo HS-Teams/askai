@@ -85,6 +85,9 @@ class ChatContext:
 
         return self.get(key)
 
+    def update_token_limit(self, token_limit: int | None):
+        self._token_limit = token_limit
+
     def get(self, key: str) -> ContextRaw:
         """Retrieve a context message identified by the specified key.
         :param key: The identifier for the context message.
