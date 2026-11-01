@@ -17,6 +17,7 @@ from hspylib.core.enums.enumeration import Enumeration
 from hspylib.core.exception.exceptions import InvalidArgumentError
 from hspylib.core.namespace import Namespace
 from hspylib.modules.eventbus.fluid import FluidEvent, FluidEventBus
+from askai.core.support.communication import ReplyChannel
 
 ASKAI_BUS_NAME: str = "askai-reply-bus"
 
@@ -67,3 +68,4 @@ class AskAiEvents(Enumeration):
 
 
 events: Namespace = AskAiEvents.ASKAI_BUS.events
+events.reply = ReplyChannel(events.reply)
