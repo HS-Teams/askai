@@ -14,7 +14,6 @@ Copyright (c) 2024, AskAI
 """
 from abc import ABC
 from pathlib import Path
-from textwrap import dedent
 import os
 
 from clitt.core.tui.mselect.mselect import mselect
@@ -32,32 +31,38 @@ class TtsSttCmd(ABC):
     """Provides Speech-to-Text (STT) and Text-to-Speech (TTS) command functionalities."""
 
     @staticmethod
-    def voice_list() -> None:
+    def voice_list() -> dict:
         active = shared.speech.tts
         speech = getattr(active, "voice_engine", active)
         refresh = getattr(speech, "refresh_voices", speech.voices)
-        voices = "\n".join(f"{i}. {voice}" for i, voice in enumerate(refresh()))
+        catalogue = [{'index': index, 'name': voice} for index, voice in enumerate(refresh())]
+        voices = "\n".join(f"{voice['index']}. {voice['name']}" for voice in catalogue)
         text_formatter.commander_print(
             f"Available `{speech.model_name}` voices:\n{voices}\n"
             f"Current voice: `{speech.voice}`\n"
             '> Use `/voices set "voice name"` or `/voices play <number|voice_name>`.'
         )
+        return {'voices': catalogue, 'index_base': 0, 'model': speech.model_name, 'selected_voice': speech.voice}
 
     @staticmethod
-    def voice_set(name_or_index: str | int | None = None) -> None:
+    def voice_set(name_or_index: str | int | None = None) -> dict:
         speech = shared.speech.tts
         if voice := TtsSttCmd._resolve_voice(name_or_index):
             speech.select_voice(voice)
             text_formatter.commander_print(f"Voice changed to `{voice}`")
+            return {'selected_voice': speech.voice, 'requested_voice': voice}
+        return {'status': 'failed', 'error': f'Invalid voice name/index: {name_or_index}'}
 
     @staticmethod
-    def voice_play(name_or_index: str | int | None = None) -> None:
+    def voice_play(name_or_index: str | int | None = None) -> dict:
         if voice := TtsSttCmd._resolve_voice(name_or_index):
             active = shared.speech.tts
             speech = getattr(active, "voice_engine", active)
             speech.synthesize(
                 "Hello! This is a sample of my voice.", stream=False, voice=voice
             )
+            return {'preview_voice': voice}
+        return {'status': 'failed', 'error': f'Invalid voice name/index: {name_or_index}'}
 
     @staticmethod
     def _resolve_voice(name_or_index: str | int | None) -> str | None:
@@ -146,22 +151,43 @@ class TtsSttCmd(ABC):
 
     @staticmethod
     def dictate(dest_file: str | None) -> None:
-        """Dictates text and optionally saves it to a file.
-        :param dest_file: The destination file path where the dictated text will be saved, or None if no file is specified.
-        """
-        file_info: str = f"Dictated text saved: *'{dest_file}'*" if dest_file else ""
-        dictated_text: str | None = recorder.dictate()
+        from uuid import uuid4
 
-        if dictated_text:
-            if dest_file and os.path.exists(os.path.dirname(dest_file)):
-                with open(dest_file, "w") as f_dictation:
-                    f_dictation.write(dictated_text + os.linesep)
-            # fmt: off
-            text_formatter.commander_print(
-                dedent(f"""\
-                {file_info}
-                Dictated text: ` {dictated_text} `
-                """).strip())
-            # fmt: on
+        from askai.core.askai_messages import msg
+        from askai.core.askai_prompt import prompt
+        from askai.core.speech import dictation
+        from askai.cli.dictation_input import finish_requested
+        from askai.core.support.app_paths import askai_data_dir
+        from askai.core.support.inference import complete
+
+        if dest_file:
+            destination = Path(dest_file).expanduser().absolute()
         else:
-            text_formatter.commander_print(f"Dictation *produced no text* !")
+            directory = askai_data_dir() / "dictations"
+            directory.mkdir(parents=True, exist_ok=True)
+            destination = directory / f"dictation-{uuid4().hex}.txt"
+        dictation.validate_destination(destination)
+        text_formatter.commander_print(
+            msg.t("Dictating. Press Esc or pause for more than 3 seconds to finish and save.")
+        )
+        _, original = recorder.listen(
+            raise_on_timeout=False, raise_on_intelligible=False,
+            counter_msg=msg.dictating(),
+            end_silence=dictation.END_SILENCE_SECONDS, phrase_limit=0,
+            finish_requested=finish_requested,
+        )
+        if not original:
+            text_formatter.commander_print(msg.t("Dictation produced no text!"))
+            return
+        source = dictation.save_original(destination, original)
+        text_formatter.commander_print(msg.t("Original dictation saved:") + f" `{source}`")
+        refined = dictation.refine(original, prompt.read_prompt("dictation-refiner.txt"), complete)
+        dictation.save_refined(destination, refined)
+        from askai.core.speech.dictation_memory import register
+        from askai.core.support.persistent_memory import PersistentMemory
+
+        durable = (PersistentMemory(askai_data_dir() / "memory" / "history.sqlite3")
+                   if configs.is_keep_context else None)
+        register(shared.memory, durable, configs.agent, Path.cwd(), source, destination, refined)
+        text_formatter.commander_print(refined)
+        text_formatter.commander_print(msg.t("Refined dictation saved:") + f" `{destination}`")

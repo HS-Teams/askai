@@ -25,7 +25,6 @@ from hspylib.core.enums.enumeration import Enumeration
 from hspylib.core.metaclass.classpath import AnyPath
 from hspylib.core.metaclass.singleton import Singleton
 from hspylib.core.preconditions import check_argument, check_state
-from hspylib.core.tools.text_tools import ensure_endswith
 from hspylib.core.zoned_datetime import now_ms
 from hspylib.modules.application.exit_status import ExitStatus
 from pathlib import Path
@@ -34,7 +33,6 @@ from typing import Optional, TypeAlias
 
 import logging as log
 import operator
-import os
 import sys
 import threading
 
@@ -160,6 +158,10 @@ class Recorder(metaclass=Singleton):
         raise_on_timeout: bool = True,
         raise_on_intelligible: bool = True,
         counter_msg: str = msg.listening(),
+        *,
+        end_silence: float | None = None,
+        phrase_limit: float | None = None,
+        finish_requested=None,
     ) -> tuple[Path, Optional[str]]:
         """Listen to the microphone, save the recorded audio as a WAV file, and transcribe the speech.
         :param recognition_api: The API to use for recognizing the speech. Defaults to the configured STT engine.
@@ -174,7 +176,7 @@ class Recorder(metaclass=Singleton):
         language = language or configs.stt_language
         stop_event: threading.Event = threading.Event()
         timeout: float = seconds(configs.recorder_silence_timeout_millis)
-        limit: float = seconds(configs.recorder_phrase_limit_millis)
+        limit: float = seconds(configs.recorder_phrase_limit_millis) if phrase_limit is None else phrase_limit
 
         with Microphone(device_index=self._device_index) as mic_source:
             try:
@@ -188,15 +190,18 @@ class Recorder(metaclass=Singleton):
                 try:
                     audio: AudioData = capture_phrase(
                         self._rec, mic_source, timeout=timeout,
-                        end_silence=seconds(configs.recorder_end_silence_millis),
+                        end_silence=(seconds(configs.recorder_end_silence_millis)
+                                     if end_silence is None else end_silence),
                         phrase_limit=limit,
                         tail_margin=seconds(configs.recorder_tail_margin_millis),
+                        finish_requested=finish_requested,
                     )
                 finally:
                     stop_event.set()
                     counter_thread.join()
                     events.listening.emit(listening=False)
-                stt_text = self._write_audio_file(audio, audio_path, language, recognition_api)
+                stt_text = (self._write_audio_file(audio, audio_path, language, recognition_api)
+                            if audio.frame_data else None)
             except WaitTimeoutError as err:
                 log.warning("Timed out while waiting for a speech input!")
                 if raise_on_timeout:
@@ -221,29 +226,6 @@ class Recorder(metaclass=Singleton):
                     events.listening.emit(listening=False)
 
         return audio_path, stt_text
-
-    def dictate(
-        self, recognition_api: RecognitionApi | None = None, language: Language | None = None
-    ) -> Optional[str]:
-        """Captures dictated speech, processes it into text, and returns the transcribed text.
-        :param recognition_api: The API to use for recognizing the speech. Defaults to the configured STT engine.
-        :param language: The spoken language. Defaults to the configured STT language.
-        :return: A string containing the dictated text. If transcription fails, None will be returned.
-        """
-        dictated_text: str = ""
-        audio_path: Path = Path(f"{REC_DIR}/askai-dictate-{now_ms()}.wav")
-
-        while True:
-            _, phrase = self.listen(recognition_api, language, audio_path, False, False, msg.dictating())
-            if phrase:
-                display_text(f" `{('…' if dictated_text else '') + phrase}`  ", markdown=True)
-                dictated_text += (". " if dictated_text else "") + phrase.capitalize()
-                if phrase.endswith((msg.t("quit"), msg.t("exit"), msg.t("bye"), msg.t("end"))):
-                    break
-            else:
-                break
-
-        return ensure_endswith(dictated_text.capitalize(), "." + os.linesep) if dictated_text else dictated_text
 
     def _write_audio_file(
         self, audio: AudioData, audio_path: AnyPath, language: Language, recognition_api: RecognitionApi | None

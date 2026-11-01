@@ -153,6 +153,14 @@ class PersistentMemory:
                 entry["error"] = payload["error"]
         return [entry for entry in conversations.values() if day is None or entry["day"] == day]
 
+    def latest_dictation(self, agent: str, cwd: str) -> dict | None:
+        with closing(self._connect()) as db:
+            row = db.execute(
+                "SELECT payload FROM events WHERE agent=? AND cwd=? AND kind='dictation' "
+                "ORDER BY id DESC LIMIT 1", (agent, cwd),
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
     def context(self, agent: str, cwd: str, limit: int = 30) -> str:
         with closing(self._connect()) as db:
             rows = db.execute(
