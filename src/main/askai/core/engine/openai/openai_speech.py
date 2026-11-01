@@ -1,15 +1,13 @@
 """OpenAI implementation of the engine speech contract."""
 
 from pathlib import Path
-from threading import Thread
+from threading import Event
 from typing import Optional
 import logging as log
-import pause
 
 from askai.core.askai_settings import settings
 from askai.core.component.cache_service import cache
 from askai.core.component.multimedia.audio_player import player
-from askai.core.component.text_streamer import streamer
 
 
 class OpenAISpeech:
@@ -80,15 +78,20 @@ class OpenAISpeech:
             else:
                 log.debug(f"Audio file found in cache: '%s' at %s", text, speech_file_path)
             if playback:
-                speak_thread = Thread(
-                    daemon=True, target=player.play_audio_file, args=(speech_file_path, self._configs.tempo)
-                )
-                speak_thread.start()
-                if stream:
-                    pause.seconds(player.start_delay())
-                    streamer.stream_text(text, prefix)
-                speak_thread.join()  # Block until the speech has finished.
+                from askai.core.speech.playback import synchronized_speech
                 from askai.core.support.cache_policy import release_transient_audio
-                release_transient_audio(speech_file_path)
+                try:
+                    if stream:
+                        from askai.cli.speech_renderer import stream_answer
+                        from askai.core.support.text_formatter import text_formatter
+                        synchronized_speech(
+                            speech_file_path, self._configs.tempo, Event(),
+                            lambda timing, cancelled: stream_answer(
+                                text_formatter.console, text, prefix, timing, cancelled),
+                        )
+                    else:
+                        player.play_audio_file(speech_file_path, self._configs.tempo)
+                finally:
+                    release_transient_audio(speech_file_path)
             return Path(speech_file_path)
         return None

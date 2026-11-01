@@ -34,7 +34,6 @@ class SpeechService:
         from askai.core.speech.output_queue import SpeechOutputQueue
         from askai.core.speech.playback import play_speech, synchronized_speech
         from askai.core.askai_configs import configs
-        from askai.core.component.multimedia.audio_player import player
 
         with self._lock:
             if self._output is None:
@@ -44,7 +43,7 @@ class SpeechService:
                     on_error,
                 )
             presentation = (
-                (lambda path, cancelled: synchronized_speech(path, configs.tempo, cancelled, present, player.start_delay()))
+                (lambda path, cancelled: synchronized_speech(path, configs.tempo, cancelled, present))
                 if present is not None else None
             )
             live = getattr(self.tts, 'speak_live', None) if immediate else None

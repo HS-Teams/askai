@@ -130,7 +130,11 @@ class ElevenLabsTTS:
             self.select_voice(self._default_voice)
         # A real, tiny request at setup validates authentication, voice and quota.
         with NamedTemporaryFile(suffix='.wav') as sample:
-            self._generate(self.PROBE_TEXT, self.voice, Path(sample.name))
+            from askai.core.speech.timing import timing_path
+            try:
+                self._generate(self.PROBE_TEXT, self.voice, Path(sample.name))
+            finally:
+                timing_path(sample.name).unlink(missing_ok=True)
         if self._voices is None:
             import logging
 
@@ -201,16 +205,32 @@ class ElevenLabsTTS:
             return path
 
     def _generate(self, text, voice, path):
-        with self._call('POST', '/v1/text-to-speech/' + quote(voice, safe=''),
+        import base64
+        import json
+        from askai.core.speech.timing import timing_path
+
+        with self._call('POST', '/v1/text-to-speech/' + quote(voice, safe='') + '/with-timestamps',
                         params={'output_format': f'pcm_{self.SAMPLE_RATE}'},
                         json={'text': text, 'model_id': self.model_name}) as response:
-            content_type = response.headers.get('Content-Type', '').split(';')[0]
-            audio = response.content
-        if not (content_type.startswith('audio/') or content_type == 'application/octet-stream'):
-            raise AgentError('ElevenLabs did not return audio')
+            payload = response.json()
+        try:
+            audio = base64.b64decode(payload['audio_base64'], validate=True)
+        except (KeyError, ValueError, TypeError) as error:
+            raise AgentError('ElevenLabs did not return valid audio') from error
         if not audio or len(audio) % 2:
             raise AgentError('ElevenLabs returned incomplete PCM audio')
         self._write_pcm(audio, path)
+        alignment = payload.get('alignment')
+        if alignment:
+            target = timing_path(path)
+            with NamedTemporaryFile(dir=path.parent, mode='w', encoding='utf-8', delete=False) as output:
+                staging = Path(output.name)
+                try:
+                    json.dump(alignment, output)
+                    output.flush()
+                    staging.replace(target)
+                finally:
+                    staging.unlink(missing_ok=True)
 
     def _write_pcm(self, audio, path):
         with NamedTemporaryFile(dir=path.parent, suffix='.wav', delete=False) as temporary:

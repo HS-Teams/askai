@@ -38,3 +38,5 @@ def transient_audio_path(audio_format):
 def release_transient_audio(path):
     if path and _audio_directory is not None and Path(path).parent == Path(_audio_directory.name):
         Path(path).unlink(missing_ok=True)
+        from askai.core.speech.timing import timing_path
+        timing_path(path).unlink(missing_ok=True)

@@ -55,13 +55,21 @@ class PlaybackTests(unittest.TestCase):
                 wav.setsampwidth(2)
                 wav.setframerate(1000)
                 wav.writeframes(b'\0\0' * 1000)
-            def play(path, tempo, cancelled, started):
+            def play(path, tempo, cancelled, started, timing):
                 started_playing.set()
                 started.set()
                 self.assertTrue(text_done.wait(2))
             def present(duration, cancelled):
                 self.assertTrue(started_playing.is_set())
-                self.assertEqual(duration, .5)
+                self.assertEqual(duration.duration, .5)
                 text_done.set()
             with patch('askai.core.speech.playback.play_speech', side_effect=play):
                 synchronized_speech(path, 2, Event(), present)
+
+    def test_ffplay_clock_ignores_diagnostics_and_nan(self):
+        from io import BytesIO
+        from askai.core.speech.playback import _read_position
+        from askai.core.speech.timing import PlaybackTiming
+        timing = PlaybackTiming(3)
+        _read_position(BytesIO(b'warning\n nan M-A: 0\r  1.25 M-A: 0.0\r'), timing)
+        self.assertEqual(timing.position, 1.25)

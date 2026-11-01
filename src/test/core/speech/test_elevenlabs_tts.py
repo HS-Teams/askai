@@ -1,3 +1,4 @@
+import base64
 from hashlib import sha256
 import os
 from pathlib import Path
@@ -27,6 +28,7 @@ class ElevenLabsTests(unittest.TestCase):
         self.response.__enter__ = Mock(return_value=self.response)
         self.response.__exit__ = Mock(return_value=False)
         self.request.return_value = self.response
+        self.response.json.return_value = {'audio_base64': base64.b64encode(self.response.content).decode(), 'alignment': None}
         self.engine = ElevenLabsTTS(self.settings, self.cache, lambda: 1, self.request)
         self.env = patch.dict(os.environ, {'ELEVENLABS_API_KEY': 'test-secret'})
         self.env.start()
@@ -92,7 +94,7 @@ class ElevenLabsTests(unittest.TestCase):
         self.assertEqual(self.engine.voice, 'voice1')
 
     def test_probe_is_real_and_does_not_play_or_publish_cache(self):
-        self.response.json.return_value = {'voices': [{'name': 'Voice', 'voice_id': 'voice1'}], 'has_more': False}
+        self.response.json.return_value = {'voices': [{'name': 'Voice', 'voice_id': 'voice1'}], 'has_more': False, 'audio_base64': base64.b64encode(self.response.content).decode()}
         self.engine.probe()
         self.assertEqual([call.args[0] for call in self.request.call_args_list], ['POST', 'GET'])
         self.cache.audio_file_path.assert_not_called()
@@ -118,6 +120,8 @@ class ElevenLabsTests(unittest.TestCase):
             self.response.status_code = status
             self.response.headers['Content-Type'] = content_type
             self.response.content = audio
+            self.response.json.return_value = ({'audio_base64': base64.b64encode(audio).decode()}
+                                               if content_type != 'application/json' else {})
             with self.assertRaises(AgentError):
                 self.engine.synthesize('text', playback=False)
             self.assertEqual(list(self.root.iterdir()), [])
@@ -299,3 +303,16 @@ class ElevenLabsTests(unittest.TestCase):
         self.engine.probe()
         self.engine._generate.assert_called_once()
         self.assertEqual(self.engine.voice, 'voice1')
+
+    def test_timestamps_are_cached_with_audio_without_a_second_synthesis(self):
+        from askai.core.speech.timing import read_alignment
+        alignment = {'characters': list('Hi'), 'character_end_times_seconds': [.01, .02]}
+        self.response.json.return_value = {
+            'audio_base64': base64.b64encode(self.response.content).decode(), 'alignment': alignment,
+        }
+        path = self.engine.synthesize('Hi', playback=False)
+        self.assertEqual(read_alignment(path), alignment)
+        self.assertTrue(self.request.call_args.args[1].endswith('/with-timestamps'))
+        self.request.reset_mock()
+        self.engine.synthesize('Hi', playback=False)
+        self.request.assert_not_called()

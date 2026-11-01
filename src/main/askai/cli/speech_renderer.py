@@ -23,7 +23,8 @@ def stream_answer(console, text, label, duration, cancelled, narration=None):
             live.update(Text.assemble(prefix, marker + partial), refresh=True)
         reveal_text(spoken, duration, cancelled, update)
     if before.strip():
-        console.print(Text(marker + spoken))
+        from rich.markdown import Markdown
+        console.print(Markdown(marker + spoken))
         console.print()
     else:
         render_answer(console, text, label)

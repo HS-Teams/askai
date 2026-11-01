@@ -13,6 +13,5 @@ __all__ = [
     'rag_provider', 
     'scheduler', 
     'summarizer', 
-    'text_streamer'
 ]
 __version__ = '1.2.19'
