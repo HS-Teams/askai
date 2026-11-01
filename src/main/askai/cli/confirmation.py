@@ -1,65 +1,41 @@
-"""Reusable explicit confirmation, independent of agents and application state."""
-
+"""Reusable keyboard confirmation with explicit permission scope."""
 from rich.panel import Panel
 from rich.text import Text
 
 
-def show_confirmation(console, message: str, translate=lambda text: text) -> None:
+def read_confirmation_key(_prompt=''):
+    from hspylib.modules.cli.keyboard import Keyboard
+    key = Keyboard.wait_keystroke()
+    return key.val if key is not None else None
+
+
+def show_confirmation(console, message: str, translate=lambda text: text, grants=()) -> None:
     body = Text(message)
-    body.append("\n\n(1) " + translate("Yes, allow"), style="bold green")
-    body.append("     [(2) " + translate("No, cancel") + "]", style="bold red")
-    body.append("\n" + translate("This action only. Enter cancels."), style="dim")
-    console.print(
-        Panel(
-            body, title="⚠ " + translate("CONFIRMATION REQUIRED"), border_style="yellow"
-        )
-    )
+    if grants:
+        body.append('\n' + '\n'.join(grants), style='grey70')
+    body.append('\n\n(1) ' + translate('Yes, allow'), style='bold green')
+    body.append('     [(2) ' + translate('No, cancel') + ']', style='bold red')
+    body.append('\n' + translate('This action only. Enter cancels.'), style='dim')
+    console.print(Panel(body, title='⚠ ' + translate('CONFIRMATION REQUIRED'), border_style='yellow'))
 
 
 class Confirmation:
-    """Read a deliberate yes/no decision through caller-owned UI adapters."""
-
-    def __init__(self, read, show, translate=lambda text: text):
+    def __init__(self, read, show, translate=lambda text: text, echo=lambda text: None):
         self._read, self._show = read, show
         self._translate = translate
+        self._echo = echo
 
-    def __call__(self, message: str) -> bool:
-        self._show(message)
+    def __call__(self, message: str, grants=()) -> bool:
+        if grants:
+            self._show(message, grants=grants)
+        else:
+            self._show(message)
+        labels = {True: self._translate('Yes, allow'), False: self._translate('No, cancel')}
         while True:
-            answer = (
-                (self._read(
-                    "(1) " + self._translate("Yes, allow")
-                    + "     [(2) " + self._translate("No, cancel") + "]"
-                ) or "")
-                .strip()
-                .casefold()
-                .rstrip(".!?")
-            )
-            if answer in {
-                "1",
-                "sim",
-                "s",
-                "yes",
-                "y",
-                self._translate("Yes").strip().casefold(),
-            }:
+            answer = self._read('')
+            if answer == '1':
+                self._echo(labels[True])
                 return True
-            if answer in {
-                "2",
-                "não",
-                "nao",
-                "n",
-                "no",
-                "cancelar",
-                "cancel",
-                "",
-                self._translate("No").strip().casefold(),
-            }:
+            if answer in ('2', '\r', '\n', '\x1b', '', None):
+                self._echo(labels[False])
                 return False
-            self._show(
-                self._translate(
-                    "Choose (1) Yes or (2) No. No action has been authorized."
-                )
-                + "\n\n"
-                + message
-            )

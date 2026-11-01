@@ -11,7 +11,7 @@ class InteractionTests(unittest.TestCase):
         self.show = Mock()
 
     def test_approval_uses_project_reader_and_human_message(self):
-        read = Mock(return_value="Sim.")
+        read = Mock(return_value="1")
         response = AgentInteraction(read, self.show)(
             "item/commandExecution/requestApproval",
             {
@@ -29,14 +29,14 @@ class InteractionTests(unittest.TestCase):
         self.assertNotIn("availableDecisions", rendered)
 
     def test_negative_voice_answer_uses_supported_cancel(self):
-        response = AgentInteraction(Mock(return_value="Não."), self.show)(
+        response = AgentInteraction(Mock(return_value="2"), self.show)(
             "item/commandExecution/requestApproval",
             {"availableDecisions": ["accept", "cancel"]},
         )
         self.assertEqual(response, {"decision": "cancel"})
 
     def test_ambiguous_answer_does_not_authorize(self):
-        read = Mock(side_effect=["talvez", "não"])
+        read = Mock(side_effect=["x", "2"])
         response = AgentInteraction(read, self.show)("approval", {})
         self.assertEqual(response, {"decision": "decline"})
         self.assertEqual(read.call_count, 2)

@@ -110,7 +110,8 @@ class AgentInteraction:
                 )
             )
             return {"action": "cancel"}
-        if confirm and not self._confirm(message):
+        scope = {"grants": params["askaiGrants"]} if params.get("askaiGrants") else {}
+        if confirm and not self._confirm(message, **scope):
             return {"action": "decline"}
         if not confirm:
             self._show(message)

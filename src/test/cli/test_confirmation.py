@@ -6,12 +6,23 @@ from askai.cli.confirmation import Confirmation, show_confirmation
 
 
 class ConfirmationTests(unittest.TestCase):
-    def test_options_support_numbers_and_voice(self):
+    def test_selection_echoes_localized_label_once_before_return(self):
+        labels = {'Yes, allow': 'Sim, permitir', 'No, cancel': 'Não, cancelar'}
+        for key, allowed in [('1', True), ('2', False), ('\r', False), ('\x1b', False)]:
+            with self.subTest(key=key):
+                echo = Mock()
+                confirm = Confirmation(Mock(side_effect=['x', key]), Mock(),
+                                       translate=labels.__getitem__, echo=echo)
+                self.assertEqual(confirm('Permitir?'), allowed)
+                echo.assert_called_once_with('Sim, permitir' if allowed else 'Não, cancelar')
+
+
+    def test_options_accept_only_expected_keys(self):
         for answer, expected in [
             ("1", True),
-            ("Sim.", True),
+            ("\r", False),
             ("2", False),
-            ("Não.", False),
+            ("\x1b", False),
             ("", False),
             (None, False),
         ]:
@@ -61,7 +72,25 @@ class ConfirmationTests(unittest.TestCase):
         translate = lambda text: labels.get(text, text)
         read = Mock(return_value="")
         self.assertFalse(Confirmation(read, Mock(), translate)("Abrir?"))
-        read.assert_called_once_with("(1) Sim, permitir     [(2) Não, cancelar]")
+        read.assert_called_once_with("")
         output = StringIO()
         show_confirmation(Console(file=output, width=100, color_system=None), "Abrir?", translate)
         self.assertIn("(1) Sim, permitir     [(2) Não, cancelar]", output.getvalue())
+
+    def test_invalid_keys_are_ignored_without_reprinting(self):
+        read, show = Mock(side_effect=['s', 'y', 'x', '3', '1']), Mock()
+        self.assertTrue(Confirmation(read, show)('Allow?'))
+        show.assert_called_once_with('Allow?')
+
+    def test_grants_are_below_question_in_light_gray(self):
+        console = Mock()
+        grants = ['askai.grants.camera.preview.local', 'askai.grants.desktop.pointer.move']
+        show_confirmation(console, 'Allow?', grants=grants)
+        body = console.print.call_args.args[0].renderable
+        self.assertTrue(body.plain.startswith('Allow?\n' + '\n'.join(grants)))
+        self.assertTrue(any(span.style == 'grey70' for span in body.spans))
+
+    def test_scope_is_passed_separately_from_translated_message(self):
+        show = Mock()
+        Confirmation(Mock(return_value='1'), show)('Allow?', grants=['askai.grants.camera.preview.local'])
+        show.assert_called_once_with('Allow?', grants=['askai.grants.camera.preview.local'])
