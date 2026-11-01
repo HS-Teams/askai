@@ -47,10 +47,22 @@ class Orchestrator:
         try:
             day = self._today().isoformat()
             key = str(cwd.resolve())
-            if self._durable and self._resume_history():
-                self._durable.reset_session(self._agent_name, key, day)
+            from askai.core.orchestration.session_reset import reset_saved_session
+
+            reset_saved_session(
+                self._backend, self._durable if self._resume_history() else None,
+                self._agent_name, key, day, self._sessions.get((key, day)),
+            )
             self._sessions.pop((key, day), None)
             self._last_session_key = None
+        finally:
+            self._active.release()
+
+    def set_model(self, model):
+        if not self._active.acquire(blocking=False):
+            raise AgentError('Wait for the current task to finish before changing the model')
+        try:
+            self._model = model
         finally:
             self._active.release()
 
@@ -178,6 +190,14 @@ class Orchestrator:
         if self.cancelled.is_set():
             raise AgentError("Request cancelled before execution")
         key = (str(cwd.resolve()), day)
+        from askai.core.speech.dictation_memory import context as dictation_context
+
+        latest_dictation = dictation_context(
+            self._memory, self._durable if self._record_history else None,
+            self._agent_name, cwd,
+        )
+        if latest_dictation:
+            context += "\n\n" + latest_dictation
         task = AgentTask(
             question,
             cwd,

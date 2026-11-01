@@ -143,3 +143,16 @@ class OrchestratorTests(unittest.TestCase):
         self.backend.run.assert_not_called()
         self.validator.assert_not_called()
         self.refiner.assert_not_called()
+
+    def test_last_dictation_reaches_existing_session_without_copying_long_text(self):
+        from askai.core.speech.dictation_memory import register
+
+        self.run_request()
+        register(self.memory, None, 'codex', Path.cwd(), Path('original.txt'),
+                 Path('refined.txt'), 'private text ' * 10000)
+        self.run_request('Leia o ultimo ditado')
+        task = self.backend.run.call_args.args[0]
+        self.assertEqual(task.session_id, 's')
+        self.assertIn('refined.txt', task.context)
+        self.assertNotIn('private text', task.context)
+        self.assertLess(len(task.context), 2000)

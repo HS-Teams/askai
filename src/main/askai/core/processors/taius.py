@@ -25,6 +25,10 @@ class TaiusProcessor:
         if self._orchestrator:
             self._orchestrator.cancelled.set()
 
+    def set_model(self, model):
+        if self._orchestrator is not None:
+            self._orchestrator.set_model(model)
+
     def reset_session(self):
         from askai.core.askai_configs import configs
         if not configs.is_keep_context and self._orchestrator is None:
@@ -37,9 +41,12 @@ class TaiusProcessor:
             from askai.core.askai_settings import ASKAI_DIR
             from askai.core.support.persistent_memory import PersistentMemory
 
-            PersistentMemory(
-                Path(ASKAI_DIR) / "memory" / "history.sqlite3"
-            ).reset_session(
+            from askai.core.support.shared_instances import shared
+            from askai.core.orchestration.session_reset import reset_saved_session
+
+            reset_saved_session(
+                shared.engine.backend,
+                PersistentMemory(Path(ASKAI_DIR) / "memory" / "history.sqlite3"),
                 configs.agent, str(Path.cwd().resolve()), date.today().isoformat()
             )
 
