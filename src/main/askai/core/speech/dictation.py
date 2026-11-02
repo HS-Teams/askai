@@ -16,7 +16,7 @@ END_SILENCE_SECONDS = 3.0
 
 
 def original_path(destination: Path) -> Path:
-    return destination.with_name(destination.name + ".original.txt")
+    return destination.with_name(destination.name + ".orig")
 
 
 def validate_destination(destination: Path) -> None:

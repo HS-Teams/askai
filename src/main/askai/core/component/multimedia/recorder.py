@@ -162,6 +162,9 @@ class Recorder(metaclass=Singleton):
         end_silence: float | None = None,
         phrase_limit: float | None = None,
         finish_requested=None,
+        wait_for_speech: bool = False,
+        on_ready=None,
+        on_captured=None,
     ) -> tuple[Path, Optional[str]]:
         """Listen to the microphone, save the recorded audio as a WAV file, and transcribe the speech.
         :param recognition_api: The API to use for recognizing the speech. Defaults to the configured STT engine.
@@ -175,7 +178,9 @@ class Recorder(metaclass=Singleton):
         """
         language = language or configs.stt_language
         stop_event: threading.Event = threading.Event()
-        timeout: float = seconds(configs.recorder_silence_timeout_millis)
+        from askai.core.speech.capture import MIN_SPEECH_WAIT_SECONDS
+        timeout = (None if wait_for_speech else
+                   max(MIN_SPEECH_WAIT_SECONDS, seconds(configs.recorder_silence_timeout_millis)))
         limit: float = seconds(configs.recorder_phrase_limit_millis) if phrase_limit is None else phrase_limit
 
         with Microphone(device_index=self._device_index) as mic_source:
@@ -184,6 +189,11 @@ class Recorder(metaclass=Singleton):
                 counter_thread = threading.Thread(target=self.countdown, args=(limit, stop_event, counter_msg))
                 audio_path = audio_path or Path(f"{REC_DIR}/askai-stt-{now_ms()}.wav")
                 self._detect_noise(mic_source)
+                if on_ready is not None:
+                    on_ready()
+                if counter_msg:
+                    value = int(limit) if limit else 0
+                    events.listening.emit(listening=True, text=f"{counter_msg} {value // 60:02d}:{value % 60:02d}")
                 counter_thread.start()
                 from askai.core.speech.capture import capture_phrase
 
@@ -200,6 +210,8 @@ class Recorder(metaclass=Singleton):
                     stop_event.set()
                     counter_thread.join()
                     events.listening.emit(listening=False)
+                if on_captured is not None:
+                    on_captured()
                 stt_text = (self._write_audio_file(audio, audio_path, language, recognition_api)
                             if audio.frame_data else None)
             except WaitTimeoutError as err:

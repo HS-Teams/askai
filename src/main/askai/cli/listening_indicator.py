@@ -27,4 +27,5 @@ class ListeningIndicator:
         )
         if not self._active:
             self._status.start()
+            self._status.update(spinner="dots")
             self._active = True

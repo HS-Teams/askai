@@ -8,6 +8,9 @@ from askai.core.speech import dictation
 
 
 class DictationTests(unittest.TestCase):
+    def test_original_filename_appends_orig_to_destination(self):
+        self.assertEqual(dictation.original_path(Path("dictation-abc.txt")), Path("dictation-abc.txt.orig"))
+
     def test_refinement_is_structured_and_preserves_source(self):
         complete = Mock(return_value=json.dumps({'final_text': 'Olá, NASA!'}))
         original = 'Olá NASA'

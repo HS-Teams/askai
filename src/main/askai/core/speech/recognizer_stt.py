@@ -23,15 +23,17 @@ class RecognizerSTT:
         locale = language.strip().replace("_", "-")
         if self.provider == 'google':
             return recognizer.recognize_google(audio, language=locale)
-        return self._transcribe_whisper(recognizer, audio, locale.split('-', 1)[0].lower())
+        from askai.core.askai_settings import settings
+        model = settings.get('askai.speech.stt.whisper.model') or 'small'
+        return self._transcribe_whisper(recognizer, audio, locale.split('-', 1)[0].lower(), model)
 
     @staticmethod
-    def _transcribe_whisper(recognizer, audio, language):
+    def _transcribe_whisper(recognizer, audio, language, model="small"):
         from speech_recognition import UnknownValueError
 
         # Whisper normally retries uncertain speech with progressively random sampling.
         result = recognizer.recognize_whisper(
-            audio, language=language, task='transcribe', temperature=0,
+            audio, model=model, language=language, task='transcribe', temperature=0,
             condition_on_previous_text=False, show_dict=True,
             logprob_threshold=WHISPER_LOGPROB_THRESHOLD,
         )

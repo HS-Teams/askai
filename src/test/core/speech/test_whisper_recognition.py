@@ -18,7 +18,7 @@ class WhisperRecognitionTests(unittest.TestCase):
         text, options = self.transcribe('  Liste as vozes disponíveis. ', [-.52])
         self.assertEqual(text, 'Liste as vozes disponíveis.')
         self.assertEqual(options, {
-            'language': 'pt', 'task': 'transcribe', 'temperature': 0,
+            'model': 'small', 'language': 'pt', 'task': 'transcribe', 'temperature': 0,
             'condition_on_previous_text': False, 'show_dict': True,
             'logprob_threshold': -1.0,
         })
@@ -36,3 +36,32 @@ class WhisperRecognitionTests(unittest.TestCase):
     def test_mixed_confidence_preserves_complete_dictation(self):
         text = 'Eu quero uma bola azul, isto e, vermelha.'
         self.assertEqual(self.transcribe(text, [-.2, -1.4])[0], text)
+
+    def test_setting_changes_model_without_recreating_engine_and_keeps_pt_br_local(self):
+        import io
+        import wave
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        buffer = io.BytesIO()
+        with wave.open(buffer, 'wb') as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(b'\x00\x00' * 160)
+        values = {'askai.speech.stt.whisper.model': 'small'}
+        settings = SimpleNamespace(get=values.get)
+        engine = RecognizerSTT('whisper')
+        result = {'text': 'Olá, tudo bem?', 'segments': [{'avg_logprob': -.2}]}
+        with patch.dict('sys.modules', {'askai.core.askai_settings': SimpleNamespace(settings=settings)}), patch(
+                'speech_recognition.Recognizer.recognize_whisper', return_value=result) as local, patch(
+                'speech_recognition.Recognizer.recognize_google') as google:
+            for model in ('small', 'medium', 'large-v3'):
+                values['askai.speech.stt.whisper.model'] = model
+                self.assertEqual(engine.transcribe(buffer.getvalue(), 'pt_BR'), 'Olá, tudo bem?')
+                self.assertEqual(local.call_args.kwargs['model'], model)
+                self.assertEqual(local.call_args.kwargs['language'], 'pt')
+                self.assertEqual(local.call_args.kwargs['task'], 'transcribe')
+            values.clear()
+            engine.transcribe(buffer.getvalue(), 'pt_BR')
+            self.assertEqual(local.call_args.kwargs['model'], 'small')
+            google.assert_not_called()

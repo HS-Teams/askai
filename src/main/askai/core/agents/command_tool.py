@@ -64,6 +64,10 @@ def askai_command(params, interact, emit, cancelled):
             queue_command(command, tokens, cancelled)
             result = {'status': 'queued', 'command': command, 'arguments': tokens,
                       'message': 'Runs after this turn. Query action=state on the next turn for its result; do not repeat the command.'}
+            if command == 'dictate':
+                result['message'] = ('Acknowledge briefly: "Dictation will start shortly..." '
+                                     '(pt_BR: "O ditado iniciará em breve..."). '
+                                     'Query action=state on the next turn for its result; do not repeat the command.')
         else:
             result = execute_command([command, *tokens])
     elif action in {'state', 'diagnostics'}:

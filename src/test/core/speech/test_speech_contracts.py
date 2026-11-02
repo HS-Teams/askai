@@ -1,5 +1,6 @@
 import io
 import unittest
+from types import SimpleNamespace
 import wave
 from unittest.mock import Mock, patch
 
@@ -10,6 +11,12 @@ from askai.core.engine.llama.llama_speech import LlamaSpeech
 
 
 class SpeechContractTests(unittest.TestCase):
+    def setUp(self):
+        setting = SimpleNamespace(get=lambda key: 'small')
+        context = patch.dict('sys.modules', {'askai.core.askai_settings': SimpleNamespace(settings=setting)})
+        context.start()
+        self.addCleanup(context.stop)
+
     def test_capabilities_are_lazy_independent_and_reused(self):
         with patch("askai.core.speech.service.create_stt") as stt, patch(
             "askai.core.speech.service.create_tts"
@@ -64,6 +71,12 @@ class SpeechContractTests(unittest.TestCase):
 
 
 class SpeechLanguageTests(unittest.TestCase):
+    def setUp(self):
+        setting = SimpleNamespace(get=lambda key: 'small')
+        context = patch.dict('sys.modules', {'askai.core.askai_settings': SimpleNamespace(settings=setting)})
+        context.start()
+        self.addCleanup(context.stop)
+
     def test_locale_is_adapted_for_each_provider(self):
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as wav:

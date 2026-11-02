@@ -59,6 +59,7 @@ class AskAiSettings(metaclass=Singleton):
         from askai.core.component.faces.models import DEFAULT_THRESHOLD
         for key, value in {
             "askai.speech.tts.engine": "ElevenLabs",
+            "askai.speech.stt.whisper.model": "small",
             "askai.elevenlabs.tts.model": "eleven_v4",
             "askai.elevenlabs.tts.voice": "",
             "askai.camera.identity.sface.cosine.threshold": DEFAULT_THRESHOLD,
@@ -145,9 +146,10 @@ class AskAiSettings(metaclass=Singleton):
         self._settings.put("askai.max.router.retries", "askai", 3)
         self._settings.put("askai.max.agent.retries", "askai", 5)
         self._settings.put("askai.max.agent.execution.time.seconds", "askai", 45)
+        self._settings.put("askai.speech.stt.whisper.model", "askai", "small")
         # Recorder
         self._settings.put("askai.recorder.devices", "askai", "")
-        self._settings.put("askai.recorder.silence.timeout.millis", "askai", 1700)
+        self._settings.put("askai.recorder.silence.timeout.millis", "askai", 3000)
         self._settings.put("askai.recorder.end.silence.millis", "askai", 2000)
         self._settings.put("askai.recorder.phrase.limit.millis", "askai", 10000)
         self._settings.put("askai.recorder.tail.margin.millis", "askai", 1500)

@@ -1,6 +1,9 @@
 """Phrase endpoint policy, independent of transcription providers and UI."""
 
 
+MIN_SPEECH_WAIT_SECONDS = 3.0
+
+
 class _FinishableStream:
     def __init__(self, stream, finish_requested):
         self._stream = stream

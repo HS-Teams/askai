@@ -167,14 +167,22 @@ class TtsSttCmd(ABC):
             directory.mkdir(parents=True, exist_ok=True)
             destination = directory / f"dictation-{uuid4().hex}.txt"
         dictation.validate_destination(destination)
-        text_formatter.commander_print(
-            msg.t("Dictating. Press Esc or pause for more than 3 seconds to finish and save.")
-        )
+        instruction = msg.t("Dictating. Press Esc or pause for more than 3 seconds to finish and save.")
+
+        def ready():
+            text_formatter.commander_print(instruction)
+            text_formatter.console.file.flush()
+
+        from askai.core.component.multimedia.audio_player import player
+        sounds = Path(__file__).resolve().parents[3] / "resources/sfx"
+        player.play_audio_file(sounds / "dictate-start.mp3")
         _, original = recorder.listen(
             raise_on_timeout=False, raise_on_intelligible=False,
             counter_msg=msg.dictating(),
             end_silence=dictation.END_SILENCE_SECONDS, phrase_limit=0,
             finish_requested=finish_requested,
+            wait_for_speech=True, on_ready=ready,
+            on_captured=lambda: player.play_audio_file(sounds / "dictate-end.mp3"),
         )
         if not original:
             text_formatter.commander_print(msg.t("Dictation produced no text!"))
@@ -189,5 +197,7 @@ class TtsSttCmd(ABC):
         durable = (PersistentMemory(askai_data_dir() / "memory" / "history.sqlite3")
                    if configs.is_keep_context else None)
         register(shared.memory, durable, configs.agent, Path.cwd(), source, destination, refined)
-        text_formatter.commander_print(refined)
         text_formatter.commander_print(msg.t("Refined dictation saved:") + f" `{destination}`")
+        from askai.core.askai_events import events
+        from askai.core.model.ai_reply import AIReply
+        events.reply.emit(reply=AIReply.final(f"<TTS>{refined}</TTS>"))
