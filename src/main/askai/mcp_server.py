@@ -11,11 +11,11 @@ from askai.core.support.app_paths import askai_data_dir
 from askai.core.permissions.grants import grants
 
 
-async def confirm_action(ctx: Context, message: str) -> bool:
+async def confirm_action(ctx: Context, message: str, *, grants: list[str]) -> bool:
     """Use the MCP form schema; model titles/descriptions are not allowed at its root."""
     result = await ctx.session.elicit_form(
         message=message,
-        requestedSchema={"type": "object", "properties": {}},
+        requestedSchema={"type": "object", "properties": {}, "x-askai-grants": grants},
         related_request_id=ctx.request_id,
     )
     return result.action == "accept"
@@ -36,7 +36,7 @@ def create_server(capabilities: DesktopCapabilities, policy=grants) -> FastMCP:
     )
 
     async def authorize(ctx, required, message):
-        return await policy.authorize_async(required, message, lambda text: confirm_action(ctx, text))
+        return await policy.authorize_async(required, message, lambda text, **scope: confirm_action(ctx, text, **scope))
 
     @server.tool(annotations=annotations)
     async def open_path(path: str, ctx: Context) -> dict:

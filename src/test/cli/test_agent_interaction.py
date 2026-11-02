@@ -69,3 +69,13 @@ class InteractionTests(unittest.TestCase):
         )
         self.assertEqual(response, {'action': 'accept', 'content': {'name': 'Hugo'}})
         confirm.assert_not_called()
+
+    def test_desktop_mcp_grants_reach_reusable_confirmation(self):
+        confirm = Mock(return_value=True)
+        params = {'serverName': 'askai_desktop', 'mode': 'form', 'message': 'Play music?',
+                  'requestedSchema': {'type': 'object', 'properties': {},
+                                      'x-askai-grants': ['askai.grants.media.play.local']}}
+        response = AgentInteraction(Mock(), self.show, confirm=confirm)(
+            'mcpServer/elicitation/request', params)
+        self.assertEqual(response['action'], 'accept')
+        self.assertEqual(confirm.call_args.kwargs['grants'], ['askai.grants.media.play.local'])

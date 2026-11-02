@@ -126,6 +126,15 @@ class CodexBackend:
                     options["ephemeral"] = True
             if not task.read_only:
                 options["developerInstructions"] = (
+                    "For computer use, follow the tool's current API documentation. Acquire an app in a "
+                    "standalone call and inspect its returned state before choosing UI elements. "
+                    "After an external UI change or AXError, refresh state before acting; never reuse stale element IDs. "
+                    "Perform one UI mutation at a time and inspect the resulting state. Use the documented paste "
+                    "operation for user text when available to preserve accents and keyboard layout. "
+                    "Before retrying creation, check whether an item already exists from the previous attempt. "
+                    "Verify the saved title, list and date/time before reporting a reminder as created. "
+                    "If the same UI operation fails again after refreshing state, stop and report the exact "
+                    "blocker and any partial result instead of repeating permission requests or creation. "
                     "For user-requested local playback, use the askai_desktop MCP play_music "
                     "and control_music tools. They own persistent ffplay playback across turns. "
                     "Do not launch afplay, ffplay, Music or another player through terminal commands. "
@@ -211,6 +220,7 @@ class CodexBackend:
         interrupted = False
         answers = {}
         commentary_sent = False
+        computer_consent = {}
         from askai.core.agents.reasoning_summaries import ReasoningSummaries
         summaries = ReasoningSummaries()
         evidence = []
@@ -243,7 +253,7 @@ class CodexBackend:
                 transport.send({"id": message["id"], "result": response})
                 continue
             if "id" in message and method:
-                self._respond(transport, message, interact)
+                self._respond(transport, message, interact, computer_consent)
                 continue
             if method == "thread/tokenUsage/updated":
                 window = params.get("tokenUsage", {}).get("modelContextWindow")
@@ -308,12 +318,17 @@ class CodexBackend:
             elif method == "item/started":
                 item = params.get("item", {})
                 emit(AgentEvent("progress", session, turn, {"type": item.get("type")}))
+                arguments = item.get("arguments")
+                if item.get("type") == "mcpToolCall" and isinstance(arguments, dict):
+                    title = arguments.get("title")
+                    if isinstance(title, str) and title.strip():
+                        emit(AgentEvent("tool_progress", session, turn, {"message": title}))
         raise AgentError(
             "Codex turn timed out; execution status may be unknown. It was not retried."
         )
 
     @staticmethod
-    def _respond(transport, request, interact):
+    def _respond(transport, request, interact, computer_consent=None):
         method, params = request["method"], request.get("params", {})
         supported = {
             ELICITATION_METHOD,
@@ -330,7 +345,12 @@ class CodexBackend:
                 }
             )
             raise AgentError(f"Codex requested an unsupported interaction: {method}")
-        response = interact(method, params)
+        response = None
+        if method == ELICITATION_METHOD:
+            from askai.core.permissions.computer_use import computer_use_reply
+            response = computer_use_reply(params, interact, computer_consent)
+        if response is None:
+            response = interact(method, params)
         if not isinstance(response, dict):
             raise AgentError("Host interaction must return a structured response")
         if method == ELICITATION_METHOD:

@@ -110,7 +110,10 @@ class AgentInteraction:
                 )
             )
             return {"action": "cancel"}
-        scope = {"grants": params["askaiGrants"]} if params.get("askaiGrants") else {}
+        grant_names = params.get("askaiGrants")
+        if not grant_names and params.get("serverName") == "askai_desktop":
+            grant_names = params["requestedSchema"].get("x-askai-grants")
+        scope = {"grants": grant_names} if grant_names else {}
         if confirm and not self._confirm(message, **scope):
             return {"action": "decline"}
         if not confirm:

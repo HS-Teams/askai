@@ -8,6 +8,21 @@ from askai.core.agents.contracts import AgentTask, AgentError
 
 
 class CodexTests(unittest.TestCase):
+    def test_computer_tool_title_is_forwarded_as_progress(self):
+        transport = self.transport([
+            {'method': 'item/started', 'params': {'item': {'type': 'mcpToolCall',
+             'arguments': {'title': 'Check reminder details'}}}},
+            {'method': 'item/completed', 'params': {'item': {'type': 'agentMessage',
+             'id': 'a', 'phase': 'final_answer', 'text': 'Unable to save; partial item remains.'}}},
+            {'method': 'turn/completed', 'params': {'turn': {'id': 't', 'status': 'completed'}}},
+        ])
+        emit = Mock()
+        CodexBackend(transport_factory=lambda _: transport).run(
+            AgentTask('create reminder', Path.cwd()), emit, Mock(), Event())
+        progress = [c.args[0].data['message'] for c in emit.call_args_list if c.args[0].kind == 'tool_progress']
+        self.assertIn('Check reminder details', progress)
+
+
     def test_writes_require_escalation_for_new_resumed_and_private_turns(self):
         for session in (None, 's'):
             for history in (True, False):

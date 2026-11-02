@@ -9,6 +9,15 @@ from askai.core.permissions.grants import GrantPolicy, GrantDenied, PREFIX, gran
 
 
 class GrantTests(unittest.TestCase):
+    def test_saving_never_and_declining_returns_false_without_exception(self):
+        read = Mock(side_effect=['ask', 'never'])
+        policy = GrantPolicy(read)
+        response = Mock(return_value={'action': 'decline'})
+        self.assertFalse(policy.authorize(['camera.capture.local'], 'Capture?', response))
+        with self.assertRaises(GrantDenied):
+            policy.pending(['camera.capture.local'])
+
+
     def test_allow_skips_confirmation_and_ask_is_per_action(self):
         confirm = Mock(return_value={'action': 'accept', 'content': {}})
         policy = GrantPolicy(lambda key: 'allow')

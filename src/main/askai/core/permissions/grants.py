@@ -8,6 +8,7 @@ from askai.core.agents.elicitation import ELICITATION_METHOD, validate_reply
 
 PREFIX = 'askai.grants.'
 GRANTS = {
+    'computer.use': 'Use the computer',
     'microphone.listen.local': 'Activate AskAI voice input using hand gestures',
     'camera.capture.local': 'Capture a local camera photo',
     'camera.preview.local': 'Open the camera preview',
@@ -34,6 +35,7 @@ class GrantValue(str, Enum):
     ASK = 'ask'
     ALLOW = 'allow'
     DENY = 'deny'
+    NEVER = 'never'
 
 
 class GrantDenied(PermissionError):
@@ -50,11 +52,11 @@ def grant_key(name: str) -> str:
 def validate_setting(name: str, value) -> str:
     grant_key(name)
     if not isinstance(value, str):
-        raise ValueError('Grant value must be ask, allow or deny')
+        raise ValueError('Grant value must be ask, allow, deny or never')
     try:
         return GrantValue(value.strip().lower()).value
     except ValueError:
-        raise ValueError('Grant value must be ask, allow or deny') from None
+        raise ValueError('Grant value must be ask, allow, deny or never') from None
 
 
 def read_grant(key: str) -> str:
@@ -94,7 +96,7 @@ class GrantPolicy:
                 value = GrantValue(self._read(key))
             except (ValueError, TypeError):
                 raise GrantDenied(f'Invalid grant value; action blocked: {key}') from None
-            if value == GrantValue.DENY:
+            if value in {GrantValue.DENY, GrantValue.NEVER}:
                 raise GrantDenied(f'Action blocked by setting: {key}')
             if value == GrantValue.ASK:
                 pending.append(key)
@@ -108,15 +110,20 @@ class GrantPolicy:
         request["askaiGrants"] = pending
         response = interact(ELICITATION_METHOD, request)
         validate_reply(request, response)
+        if response['action'] != 'accept':
+            return False
         self.pending(names)
-        return response['action'] == 'accept'
+        return True
 
     async def authorize_async(self, names, message, confirm) -> bool:
-        if not self.pending(names):
+        pending = self.pending(names)
+        if not pending:
             return True
-        accepted = await confirm(message)
+        accepted = await confirm(message, grants=pending)
+        if accepted is not True:
+            return False
         self.pending(names)
-        return accepted is True
+        return True
 
     @staticmethod
     def request(message):
