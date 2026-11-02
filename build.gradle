@@ -1,5 +1,5 @@
 plugins {
-  id 'io.github.hs-teams.pygradle' apply false
+  id 'io.github.hs-teams.pygradle' version '0.0.24' apply false
   id 'idea'
   id "org.jetbrains.gradle.plugin.idea-ext" version "1.1.8"
 }

@@ -27,15 +27,23 @@ on:
       - '**'
     paths:
       - 'src/**'
-      - 'gradle/*.gradle'
+      - 'gradle/**'
       - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'gradlew'
+      - '.github/workflows/build-and-test.yml'
   push:
     branches:
       - '**'
     paths:
       - 'src/**'
-      - 'gradle/*.gradle'
+      - 'gradle/**'
       - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'gradlew'
+      - '.github/workflows/build-and-test.yml'
 
 env:
   PYRCC_VERSION: ${{ vars.PYRCC_VERSION }}

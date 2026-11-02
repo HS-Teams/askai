@@ -69,11 +69,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.details.outputs.tag_name }}
-      - name: Checkout PyGradle
-        uses: actions/checkout@v4
-        with:
-          repository: HS-Teams/py-gradle
-          path: .build-tools/py-gradle
       - uses: actions/setup-java@v3
         with:
           distribution: temurin
@@ -100,7 +95,7 @@ jobs:
         run: |
           python3 -m pip install git+https://github.com/julian-r/python-magic.git
       - name: Install Python tools
-        run: ./gradlew -PpyGradleDir="$GITHUB_WORKSPACE/.build-tools/py-gradle" installBuildTools sdist
+        run: gradle installBuildTools sdist
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
