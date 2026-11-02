@@ -15,16 +15,22 @@ class SessionReviewTests(unittest.TestCase):
             backend = factory.return_value
             backend.run.side_effect = [
                 AgentResult('s', 'validation-turn', json.dumps(dict(color='Blue', accuracy=100.0, reasoning='Supported', tips='')), 'completed'),
-                AgentResult('s', 'refiner-turn', json.dumps(dict(final_answer='Encontrei cinco pastas.')), 'completed'),
+                AgentResult('s', 'refiner-turn', json.dumps(dict(final_answer='<TTS>Encontrei cinco pastas.</TTS>')), 'completed'),
             ]
             engine = AgentEngine('codex')
             with engine.use_session('s'):
                 validate_response(engine, (PROMPTS / 'taius-session-validator.txt').read_text())
                 answer = refine_response(engine, (PROMPTS / 'taius-session-refiner.txt').read_text(), user='Hjunior', locale='pt_BR')
-            self.assertEqual(answer, 'Encontrei cinco pastas.')
-            for call in backend.run.call_args_list:
+            self.assertEqual(answer, '<TTS>Encontrei cinco pastas.</TTS>')
+            expected_messages = [
+                {'role': 'user', 'content': (PROMPTS / 'taius-session-validator.txt').read_text().format()},
+                {'role': 'system', 'content': (PROMPTS / 'taius-session-refiner.txt').read_text().format(
+                    user='Hjunior', locale='pt_BR', assistive_instructions='', search_instructions='')},
+            ]
+            for call, expected in zip(backend.run.call_args_list, expected_messages, strict=True):
                 task = call.args[0]
                 self.assertEqual(task.session_id, 's')
                 self.assertIn('most recent task answer', task.instruction)
                 self.assertNotIn('AI Response:', task.instruction)
-                self.assertLess(len(task.instruction), 4000)
+                messages = json.loads(task.instruction.split('task messages:\n', 1)[1])
+                self.assertEqual(messages, [expected])

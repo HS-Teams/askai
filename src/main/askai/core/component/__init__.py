@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from .summarizer import Summarizer
     from .faces.models import VECTOR_SIZE
     from .retrieval import VectorIndex
-    from .cache_service import is
 
 
 _EXPORTS = {
@@ -91,7 +90,6 @@ _EXPORTS = {
     'Summarizer': ('summarizer', 'Summarizer'),
     'VECTOR_SIZE': ('faces.models', 'VECTOR_SIZE'),
     'VectorIndex': ('retrieval', 'VectorIndex'),
-    'is': ('cache_service', 'is')
 }
 
 def __getattr__(name):
@@ -151,7 +149,6 @@ __all__ = [
     'geo_location',
     'identity_enrollment',
     'internet_service',
-    'is',
     'multimedia',
     'rag_provider',
     'retrieval',

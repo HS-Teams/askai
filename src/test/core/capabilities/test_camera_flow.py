@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from askai.mcp_server import create_server
 from askai.core.capabilities.desktop import ActionResult
+from askai.core.permissions.grants import GrantPolicy
 
 
 class CameraToolTests(unittest.IsolatedAsyncioTestCase):
@@ -14,7 +15,7 @@ class CameraToolTests(unittest.IsolatedAsyncioTestCase):
         ctx = Mock()
         ctx.session.elicit_form = AsyncMock(return_value=SimpleNamespace(action=decision))
         ctx.report_progress = AsyncMock()
-        tool = create_server(capabilities)._tool_manager.get_tool(operation)
+        tool = create_server(capabilities, policy=GrantPolicy(lambda key: 'ask'))._tool_manager.get_tool(operation)
         with patch('askai.mcp_server.asyncio.sleep', new_callable=AsyncMock) as sleep:
             result = await tool.run({}, context=ctx)
         return capabilities, ctx, result, sleep
@@ -39,7 +40,7 @@ class CameraToolTests(unittest.IsolatedAsyncioTestCase):
         capabilities = Mock()
         ctx = Mock()
         ctx.session.elicit_form = AsyncMock(side_effect=RuntimeError('Host unavailable'))
-        tool = create_server(capabilities)._tool_manager.get_tool('open_camera')
+        tool = create_server(capabilities, policy=GrantPolicy(lambda key: 'ask'))._tool_manager.get_tool('open_camera')
         with self.assertRaises(Exception):
             await tool.run({}, context=ctx)
         capabilities.open_camera.assert_not_called()

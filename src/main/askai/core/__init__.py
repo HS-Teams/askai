@@ -163,7 +163,6 @@ if TYPE_CHECKING:
     from .model.screenshot_result import WebsiteModel
     from .commander.command_results import _CommandOutput
     from .speech.capture import _FinishableStream
-    from .component.cache_service import is
 
 
 _EXPORTS = {
@@ -321,7 +320,6 @@ _EXPORTS = {
     'WebsiteModel': ('model.screenshot_result', 'WebsiteModel'),
     '_CommandOutput': ('commander.command_results', '_CommandOutput'),
     '_FinishableStream': ('speech.capture', '_FinishableStream'),
-    'is': ('component.cache_service', 'is')
 }
 
 def __getattr__(name):
@@ -502,7 +500,6 @@ __all__ = [
     'component',
     'engine',
     'enums',
-    'is',
     'model',
     'orchestration',
     'permissions',

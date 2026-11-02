@@ -18,6 +18,7 @@ FORM_SCHEMA = {
     'properties': {
         'type': {'const': 'object'}, 'properties': {'type': 'object'},
         'required': {'type': ['array', 'null']}, '$schema': {'type': ['string', 'null']},
+        'x-askai-grants': {'type': 'array', 'items': {'type': 'string'}},
     },
 }
 
@@ -28,9 +29,10 @@ class CameraConsentProtocolTests(unittest.IsolatedAsyncioTestCase):
 from unittest.mock import Mock
 from askai.mcp_server import create_server
 from askai.core.capabilities.desktop import ActionResult
+from askai.core.permissions.grants import GrantPolicy
 capabilities = Mock()
 capabilities.open_camera.return_value = ActionResult('open_camera', 'completed', 'Photo Booth')
-create_server(capabilities).run(transport='stdio')
+create_server(capabilities, policy=GrantPolicy(lambda key: 'ask')).run(transport='stdio')
 '''
         answers = iter(['1', '2'])
         seen = []

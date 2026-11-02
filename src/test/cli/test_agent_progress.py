@@ -32,7 +32,9 @@ class ProgressTests(unittest.TestCase):
         self.interaction.assert_called_once_with('approval', {})
 
     def test_compaction_uses_translated_progress(self):
-        with patch('askai.core.askai_messages.msg.translate', return_value='Compacting translated') as translate:
+        translate = Mock(return_value='Compacting translated')
+        messages = Mock(msg=Mock(translate=translate))
+        with patch.dict('sys.modules', {'askai.core.askai_messages': messages}):
             self.progress.emit(AgentEvent('stage', 's', data={'stage': 'compaction'}))
         translate.assert_called_once_with('Compactando histórico…')
         self.status.update.assert_called_with('Compacting translated')

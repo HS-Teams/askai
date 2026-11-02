@@ -55,6 +55,7 @@ class AgentEngineTests(unittest.TestCase):
                 "session", "turn", "answer", "completed"
             )
             engine = AgentEngine("codex")
+            engine.configs = Mock(return_value=Mock(is_keep_context=True))
             with engine.use_session("execution-session"):
                 engine.complete(
                     [{"role": "user", "content": "Validate previous answer"}]

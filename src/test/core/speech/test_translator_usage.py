@@ -12,7 +12,7 @@ class TranslatorUsageTests(unittest.TestCase):
         client = translator._translator = Mock()
         client.get_usage.return_value = deepl.Usage({'character_count': 28, 'character_limit': 500000})
         row = translator.usage()[0]
-        self.assertEqual(row.remaining, '499972 / 500000')
+        self.assertEqual(row.remaining, '99.99%')
         self.assertEqual(row.window, 'characters')
         self.assertIsNone(row.resets_at)
         client.translate_text.assert_not_called()
