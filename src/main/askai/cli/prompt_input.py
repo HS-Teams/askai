@@ -1,4 +1,5 @@
 """Render asynchronous replies above the active line editor on its own thread."""
+from askai.cli.suggestions import input_suggestion
 from queue import Empty, Queue
 from threading import RLock, Event
 from hspylib.modules.cli.keyboard import Keyboard
@@ -36,6 +37,17 @@ class PromptInput(KeyboardInput):
         self.allow_voice = allow_voice
         self.voice_requested = Event()
 
+    def _render_suggestions(self):
+        candidate = input_suggestion(self.text, self._HISTORY,
+                                     case_sensitive=not self._case_insensitive)
+        hint = candidate[len(self.text):] if candidate else ''
+        self.cursor.erase(Direction.DOWN)
+        if hint:
+            self.write(f"%GRAY%{hint}%NC%")
+            self.cursor.move(len(hint), Direction.LEFT)
+        self._suggestion = hint
+        return hint
+
     def handle_keypress(self):
         self.flush_messages()
         if self.voice_requested.is_set():
@@ -63,6 +75,7 @@ class PromptInput(KeyboardInput):
                 return
             self.cursor.move(self._offset[0], Direction.UP)
             self.cursor.move(self._offset[1], Direction.LEFT)
+            self.write('\r')
             self.cursor.erase(Direction.DOWN)
             self._offset = (0, 0)
             try:

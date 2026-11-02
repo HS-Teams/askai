@@ -81,7 +81,7 @@ def command_suggestions() -> list[str]:
         arguments = [param for param in command.params if isinstance(param, click.Argument)]
         if arguments and isinstance(arguments[0].type, click.Choice):
             suggestions.update(f"/{name} {choice}" for choice in arguments[0].type.choices)
-    return sorted(suggestions, reverse=True)
+    return sorted(suggestions, key=lambda value: (" " in value, value))
 
 
 def commander_help(command: str | None = None) -> str:
@@ -349,7 +349,7 @@ def settings(operation: str, name: str, value: str) -> None:
 @ask_commander.command()
 @click.argument("operation", type=click.Choice(["list", "get", "set", "reset"]), default="list")
 @click.argument("name", default="")
-@click.argument("value", type=click.Choice(["ask", "allow", "deny", ""]), default="")
+@click.argument("value", type=click.Choice(["ask", "allow", "deny", "never", ""]), default="")
 def grants(operation: str, name: str, value: str) -> None:
     """Manage persistent permissions using AskAI settings.
 

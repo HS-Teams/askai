@@ -8,6 +8,7 @@ class PromptInputTests(unittest.TestCase):
     def test_reply_queued_while_typing_then_prompt_redrawn(self):
         editor = prompt_input.PromptInput.__new__(prompt_input.PromptInput)
         editor.messages = Queue()
+        editor.write = Mock()
         editor._offset = (0, 14)
         action = Mock()
         with patch.object(prompt_input, '_active', editor):
@@ -18,6 +19,7 @@ class PromptInputTests(unittest.TestCase):
             editor.render = Mock()
             editor.flush_messages()
         action.assert_called_once()
+        editor.write.assert_called_once_with('\r')
         editor.render.assert_called_once()
         self.assertEqual(editor._offset, (0, 0))
 

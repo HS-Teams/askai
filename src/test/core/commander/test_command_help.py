@@ -75,6 +75,7 @@ class CommandHelpTests(unittest.TestCase):
         for name in self.group.commands:
             self.assertIn('/' + name, suggestions)
             self.assertIn('/' + name + ' --help', suggestions)
+            self.assertLess(suggestions.index('/' + name), suggestions.index('/' + name + ' --help'))
         for entry in ('/history list', '/history enable', '/history forget', '/session reset', '/session compact'):
             self.assertIn(entry, suggestions)
         self.group.add_command(click.Command('new-command', help='New registered command'))
@@ -123,9 +124,9 @@ class CommandHelpTests(unittest.TestCase):
                 self.assertEqual(result.exit_code, 0, (name, result.output, result.exception))
                 if not positional:
                     callback.assert_called_once()
-                elif positional[0].default == 'list':
+                elif positional[0].default in ('list', 'start', 'toggle'):
                     callback.assert_called_once()
-                    self.assertEqual(callback.call_args.kwargs[positional[0].name], 'list')
+                    self.assertEqual(callback.call_args.kwargs[positional[0].name], positional[0].default)
                 else:
                     callback.assert_not_called()
                     self.assertIn('--help', result.output)

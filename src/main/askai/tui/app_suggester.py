@@ -12,6 +12,7 @@
 
    Copyright (c) 2024, AskAI
 """
+from askai.cli.suggestions import input_suggestion
 from askai.core.commander.commander import command_suggestions
 from askai.core.component.cache_service import cache
 from clitt.core.tui.line_input.keyboard_input import KeyboardInput
@@ -42,7 +43,4 @@ class InputSuggester(Suggester):
 
     async def get_suggestion(self, value: str) -> Optional[str]:
         """Get a suggestion from the list."""
-        for idx, suggestion in enumerate(self._for_comparison):
-            if suggestion.startswith(value):
-                return self._suggestions[idx]
-        return None
+        return input_suggestion(value, self._suggestions, self.case_sensitive)
