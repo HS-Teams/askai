@@ -36,15 +36,14 @@ from hspylib.core.tools.commons import console_out
 from hspylib.core.zoned_datetime import now, TIME_FORMAT
 from hspylib.modules.eventbus.event import Event
 from pathlib import Path
+from queue import SimpleQueue
 from rich.progress import Progress
 from textwrap import indent
-from threading import Thread
 from typing import Optional
 
 import logging as log
 import nltk
 import os
-import pause
 import signal
 
 
@@ -66,6 +65,7 @@ class AskAiCli(AskAi):
         super().__init__(speak, debug, cacheable, tempo, engine_name, model_name, mode)
         self._listening_indicator = None
         self._ready: bool = False
+        self._startup_notices = SimpleQueue()
         self._query_prompt: str | None = query_prompt
         self._query_string: str | None = query_string
         from askai.core.processors.taius import taius
@@ -82,7 +82,7 @@ class AskAiCli(AskAi):
                 read_confirmation_key,
                 lambda message, grants=(): show_confirmation(tf.console, message, msg.translate, grants),
                 translate=msg.translate,
-                echo=lambda text: display_text(text, shared.username, markdown=False),
+                echo=lambda text: display_text(text, markdown=False),
             ),
         )
         self._agent_progress = AgentProgress(tf.console, interact)
@@ -187,7 +187,7 @@ class AskAiCli(AskAi):
             f"TTS switched from {ev.args.provider} to Ollama. Reason: {ev.args.reason}. "
             "The configured default was not changed."
         )
-        display_text(f"%YELLOW%{message}%NC%", "⚠ " + msg.t("Warning") + " · TTS: ", markdown=False)
+        display_text(message, "%YELLOW%⚠ " + msg.t("Warning") + " · TTS: %NC%", markdown=False)
 
     def _cb_voice_input(self, ev: Event) -> None:
         from askai.cli.prompt_input import request_voice
@@ -195,6 +195,9 @@ class AskAiCli(AskAi):
             log.debug('Gesture voice input ignored: no empty question prompt is active')
 
     def _cb_reply_event(self, ev: Event) -> None:
+        if not self._ready and ev.args.reply and ev.args.reply.is_system:
+            self._startup_notices.put(ev)
+            return
         from askai.cli.prompt_input import present
         present(lambda: self._display_reply_event(ev))
 
@@ -204,6 +207,13 @@ class AskAiCli(AskAi):
         """
         reply: AIReply
         if reply := ev.args.reply:
+            if reply.is_system:
+                from rich.text import Text
+                from askai.core.support.text_formatter import text_formatter
+                notice = Text("  " + msg.t("System") + ": ", style="bold yellow")
+                notice.append(msg.translate(reply.message).strip(), style="default")
+                text_formatter.console.print(notice)
+                return
             if reply.is_error:
                 self._reply_error(reply)
             else:
@@ -243,24 +253,20 @@ class AskAiCli(AskAi):
         from askai.core.support.text_formatter import text_formatter
         from askai.cli.prompt_input import present
 
-        notice = Text(msg.t("System") + ": ", style="bold yellow")
+        notice = Text("  " + msg.t("System") + ": ", style="bold yellow")
         notice.append(msg.translate(msg.device_switch(str(ev.args.device))).strip(), style="default")
         present(lambda: text_formatter.console.print(notice))
 
-    def _splash(self, interval: int = 250) -> None:
-        """Display the AskAI splash screen until the system is fully started and ready. This method shows the splash
-        screen during the startup process and hides it once the system is ready.
-        :param interval: The interval in milliseconds for polling the startup status (default is 250 ms).
-        """
+    def _splash(self) -> None:
+        """Display the splash before the startup loader takes over the terminal."""
         screen.clear()
         console_out.print(indent(self.SPLASH, " " * 13))
-        while not self._ready:
-            pause.milliseconds(interval)
-        screen.clear()
 
     def _startup(self) -> None:
         """Initialize the application components."""
-        progress: Progress = Progress()
+        from askai.cli.startup_progress import startup_progress
+        from askai.core.support.text_formatter import text_formatter
+        progress: Progress = startup_progress(text_formatter.console)
         # List of tasks for progress tracking
         tasks = [
             "Downloading nltk data",
@@ -278,8 +284,7 @@ class AskAiCli(AskAi):
         askai_bus.subscribe(REPLY_EVENT, self._cb_reply_event)
         askai_bus.subscribe(TTS_FALLBACK_EVENT, self._cb_tts_fallback)
         if configs.is_interactive:
-            splash_thread: Thread = Thread(daemon=True, target=self._splash)
-            splash_thread.start()
+            self._splash()
             task = progress.add_task(f'[green] {msg.t("Starting up...")}', total=len(tasks))
             with progress:
                 os.chdir(Path.home())
@@ -296,7 +301,6 @@ class AskAiCli(AskAi):
                     }, lambda name: progress.update(task, advance=1, description=f"[green] {msg.t(name)}"))
                 except BaseException:
                     self._ready = True
-                    splash_thread.join()
                     raise
                 KeyboardInput.preload_history(results["Loading input history"])
                 progress.update(task, advance=1, description=f'[green] {msg.t("Starting scheduler")}')
@@ -306,12 +310,14 @@ class AskAiCli(AskAi):
                 progress.update(task, advance=1, description=f'[green] {msg.t("Starting player delay")}')
                 player.start_delay()
                 progress.update(task, advance=1, description=f'[green] {msg.t("Finalizing startup")}')
+            screen.clear()
             self._ready = True
-            splash_thread.join()
             askai_bus.subscribe(MIC_LISTENING_EVENT, self._cb_mic_listening_event)
             askai_bus.subscribe(DEVICE_CHANGED_EVENT, self._cb_device_changed_event)
             askai_bus.subscribe(MODE_CHANGED_EVENT, self._cb_mode_changed_event)
             display_text(str(self), markdown=False)
+            while not self._startup_notices.empty():
+                self._display_reply_event(self._startup_notices.get())
             pending = getattr(self, "_pending_tts_fallback", None)
             if pending is not None:
                 self._pending_tts_fallback = None

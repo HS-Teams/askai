@@ -432,7 +432,11 @@ class AskAiApp(App[None]):
             f"TTS switched from {ev.args.provider} to Ollama. Reason: {ev.args.reason}. "
             "The configured default was not changed."
         )
-        self.call_later(self.notify, message, title="TTS", severity="warning", timeout=15)
+        self.call_later(
+            self.notify, message,
+            title="⚠ " + msg.t("Warning") + " · TTS",
+            severity="warning", timeout=15, markup=False,
+        )
 
     def _cb_reply_event(self, ev: Event) -> None:
         """Callback to handle reply events.
@@ -440,6 +444,10 @@ class AskAiApp(App[None]):
         """
         reply: AIReply
         if reply := ev.args.reply:
+            if reply.is_system:
+                self.notify(msg.translate(reply.message), title="  " + msg.t("System"),
+                            severity="information", markup=False)
+                return
             if reply.is_error:
                 self._reply_error(reply)
             else:
@@ -472,7 +480,7 @@ class AskAiApp(App[None]):
         """
         self.call_later(
             self.notify, msg.translate(msg.device_switch(str(ev.args.device))).strip(),
-            title=msg.t("System"), severity="information",
+            title="  " + msg.t("System"), severity="information",
         )
 
     @work(thread=True)

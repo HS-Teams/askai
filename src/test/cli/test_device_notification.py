@@ -35,8 +35,8 @@ class DeviceNotificationTests(unittest.TestCase):
                 shared.speech.speak.assert_not_called()
                 if filename.startswith('core'):
                     notice = formatter.console.print.call_args.args[0]
-                    self.assertTrue(notice.plain.startswith('Sistema: Dispositivo:'))
+                    self.assertTrue(notice.plain.startswith('  Sistema: Dispositivo:'))
                     self.assertNotIn('Taius', notice.plain)
                 else:
-                    self.assertEqual(view.call_later.call_args.kwargs['title'], 'Sistema')
+                    self.assertEqual(view.call_later.call_args.kwargs['title'], '  Sistema')
                     self.assertEqual(view.call_later.call_args.args[0], view.notify)

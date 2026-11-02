@@ -36,9 +36,15 @@ class AIReply:
     verbosity: Verbosity
     is_speakable: bool
     is_final: bool = False
+    is_system: bool = False
 
     def __str__(self) -> str:
         return self.message
+
+    @staticmethod
+    def system(message: str) -> "AIReply":
+        """Application status, never narrated as an assistant response."""
+        return AIReply(message, True, False, Verbosity.NORMAL, False, is_system=True)
 
     @staticmethod
     def final(message: str) -> "AIReply":

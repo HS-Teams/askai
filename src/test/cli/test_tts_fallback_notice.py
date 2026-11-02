@@ -31,9 +31,14 @@ class FallbackNoticeTests(unittest.TestCase):
                     'TTS switched from ElevenLabs to Ollama. Reason: HTTP 402. '
                     'The configured default was not changed.')
                 if filename.startswith('core'):
-                    self.assertIn(translated, display.call_args.args[0])
+                    self.assertEqual(translated, display.call_args.args[0])
+                    self.assertTrue(display.call_args.args[1].startswith('%YELLOW%⚠ '))
+                    self.assertTrue(display.call_args.args[1].endswith(' · TTS: %NC%'))
                 else:
-                    self.assertEqual(view.call_later.call_args.args[1], translated)
+                    self.assertEqual(str(view.call_later.call_args.args[1]), translated)
+                    self.assertIsInstance(view.call_later.call_args.args[1], str)
+                    self.assertIsInstance(view.call_later.call_args.kwargs['title'], str)
+                    self.assertFalse(view.call_later.call_args.kwargs['markup'])
                 view._reply.assert_not_called()
 
     def test_cli_defers_startup_notice_until_splash_is_finished(self):
