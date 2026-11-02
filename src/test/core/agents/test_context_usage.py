@@ -15,7 +15,7 @@ class ContextUsageTests(unittest.TestCase):
         backend._update_context_usage('aux', {**payload, 'last': {'totalTokens': 100}})
         self.assertEqual(backend.context_usage()['used'], 42000)
         self.assertEqual(context_label(SimpleNamespace(backend=backend), lambda s: s),
-                         'Context: 42K / 128K · 33% used · 86K free')
+                         '42K / 128K · 33% used · 86K free')
 
     def test_unknown_data_and_private_reset(self):
         backend = CodexBackend()

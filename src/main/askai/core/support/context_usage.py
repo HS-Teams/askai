@@ -6,7 +6,7 @@ def context_label(engine, translate):
     backend = getattr(engine, 'backend', None)
     reader = getattr(backend, 'context_usage', None)
     usage = reader() if reader else None
-    label = translate('Context') + ': '
+    label = ''
     if usage is None:
         return label + translate('Awaiting data' if reader else 'Not reported')
     used, limit = usage['used'], usage['limit']

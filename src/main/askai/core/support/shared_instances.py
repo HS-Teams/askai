@@ -136,17 +136,12 @@ class SharedInstances(metaclass=Singleton):
         cur_dir = elide_text(str(Path(os.getcwd()).absolute()), 67, "…")
         translator = f"translated by '{msg.translator.name()}'" if configs.language.name.title() != "English" else ""
         eng: AIEngine = shared.engine
-        from askai.core.support.context_usage import context_label
-        context_info = context_label(eng, msg.t)
         capacity = eng.ai_token_limit()
         capacity_label = compact_count(capacity) if capacity is not None else msg.t("Not reported")
         model_info: str = f"'{eng.ai_model_name()}'%YELLOW% {capacity_label}%GREEN% tokens"
         engine_info: str = f"{eng.ai_name()} - %CYAN%{eng.nickname()} / {model_info}"
         rag_info: str = "%GREEN% " if configs.is_rag else "%RED% "
         assist_info: str = "%GREEN% " if configs.is_assistive else "%RED% "
-
-        tts_reason = getattr(self.speech.tts, 'failure_reason', None)
-        tts_details = ("\n           " + msg.t('TTS fallback reason') + ": " + msg.t(tts_reason)) if tts_reason else ""
 
         # fmt: off
         return dedent(f"""\
@@ -155,13 +150,11 @@ class SharedInstances(metaclass=Singleton):
                Language: {configs.language} {translator}
                Location: {' , ' + geo_location.location if configs.ip_api_enabled else '%RED% '} %GREEN%
                  Engine: {engine_info}
-                {context_info}
                    Mode: %CYAN%{self.mode}%GREEN%, %YELLOW%RAG: {rag_info}, %YELLOW%Assistive: {assist_info}%GREEN%
                     Dir: {cur_dir}
                      OS: {prompt.os_type}/{prompt.shell}
             {'-' * 80}
              Microphone: %CYAN%{device_info or '%RED%Undetected'} %GREEN%
-             TTS Engine: %CYAN%{getattr(self.speech.tts, 'provider_name', configs.tts_engine)} %GREEN%{tts_details}
                Speaking: {' , tempo: ' + speak_info if configs.is_speak else '%RED% '} %GREEN%
             {'.' * 80}
                 History: {' ' if configs.is_keep_context else '%RED% '} %GREEN%
@@ -184,7 +177,7 @@ class SharedInstances(metaclass=Singleton):
             self._mode = mode
         return self._engine
 
-    def create_context(self, token_limit: int | None) -> ChatContext:
+    def create_context(self, token_limit: int | None) -> ChatContext | None:
         """Create or retrieve a chat context with the specified token limit.
         :param token_limit: The maximum number of tokens allowed in the chat context.
         :return: An instance of the ChatContext configured with the specified token limit.
@@ -229,6 +222,7 @@ class SharedInstances(metaclass=Singleton):
         """Prompt the user for input.
         :param input_prompt: The text prompt to display to the user.
         :param placeholder: The placeholder text to display in the input field (optional).
+        :param allow_voice: Whether to allow voice input.
         :return: The user's input as a string, or None if no input is provided.
         """
         ret = None
