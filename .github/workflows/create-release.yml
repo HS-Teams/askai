@@ -2,30 +2,16 @@ name: create-release
 run-name: Create Release
 
 on:
-  push:
-    tags:
-      - "v?[0-9]+.[0-9]+.[0-9]+"
-      - "v?[0-9]+.[0-9]+.[0-9]+a[0-9]+"
-      - "v?[0-9]+.[0-9]+.[0-9]+b[0-9]+"
-      - "v?[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
-
   workflow_dispatch:
     inputs:
-      tag-name:
-        description: 'Release Tag name (default to latest)'
+      tag_name:
+        description: 'Release tag name'
         type: string
-        required: false
-
-      pypi-publish:
-        description: 'Publish to PyPi ?'
-        type: boolean
         required: true
-        default: false
 
 env:
   PACKAGE_NAME: "${{ vars.PACKAGE_NAME }}"
   OWNER: "${{ vars.OWNER }}"
-  TAP_NAME: "${{ vars.TAP_NAME }}"
 
 permissions:
   contents: write
@@ -39,19 +25,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract tag and Details
         id: release
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
-          elif [[ -n "${{ inputs.tag-name }}" ]]; then
-            TAG_NAME="${{ inputs.tag-name }}"
-          fi
-          : "${TAG_NAME:?missing tag_name output}"
-          echo "TAG-NAME: ${TAG_NAME}" >> $GITHUB_STEP_SUMMARY
-          echo "tag_name=$(echo ${TAG_NAME})" >> "$GITHUB_OUTPUT"
+          : "${TAG_NAME:?missing tag_name input}"
+          git check-ref-format "refs/tags/$TAG_NAME"
+          git ls-remote --exit-code --tags origin "refs/tags/$TAG_NAME" >/dev/null
+          echo "TAG-NAME: ${TAG_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
 
   check_pypi:
-    if: ${{ inputs['pypi-publish'] }}
     needs: details
     runs-on: ubuntu-latest
     steps:
@@ -66,9 +50,11 @@ jobs:
           echo "Latest version on PyPI: $latest_previous_version"
           echo "latest_previous_version=$latest_previous_version" >> $GITHUB_ENV
       - name: Ensure new Version
+        env:
+          RELEASE_TAG: ${{ needs.details.outputs.tag_name }}
         run: |
-          NEW_VERSION=${{ needs.details.outputs.tag_name }}
-          LATEST_VERSION=$latest_previous_version
+          NEW_VERSION="${RELEASE_TAG#v}"
+          LATEST_VERSION="$latest_previous_version"
           if [ "$(printf '%s\n' "$LATEST_VERSION" "$NEW_VERSION" | sort -rV | head -n 1)" != "$NEW_VERSION" ] || [ "$NEW_VERSION" == "$LATEST_VERSION" ]; then
             echo "The new version $NEW_VERSION is not greater than the latest version $LATEST_VERSION on PyPI."
             exit 1
@@ -77,12 +63,17 @@ jobs:
           fi
 
   build_and_test:
-    needs: details
+    needs: [details, check_pypi]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.details.outputs.tag_name }}
+      - name: Checkout PyGradle
+        uses: actions/checkout@v4
+        with:
+          repository: HS-Teams/py-gradle
+          path: .build-tools/py-gradle
       - uses: actions/setup-java@v3
         with:
           distribution: temurin
@@ -109,15 +100,15 @@ jobs:
         run: |
           python3 -m pip install git+https://github.com/julian-r/python-magic.git
       - name: Install Python tools
-        run: gradle installBuildTools sdist
+        run: ./gradlew -PpyGradleDir="$GITHUB_WORKSPACE/.build-tools/py-gradle" installBuildTools sdist
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist
           path: build/dist/
+          if-no-files-found: error
 
   pypi_publish:
-    if: ${{ inputs['pypi-publish'] }}
     name: Upload release to PyPI
     needs:
       - check_pypi
@@ -141,6 +132,7 @@ jobs:
     needs:
       - details
       - build_and_test
+      - pypi_publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -157,7 +149,6 @@ jobs:
         with:
           tag-name: ${{ needs.details.outputs.tag_name }}
       - name: Download artifacts
-        if: ${{ inputs['pypi-publish'] }}
         uses: actions/download-artifact@v4
         with:
           name: dist
@@ -166,12 +157,11 @@ jobs:
         id: create_release
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANGELOG: ${{ steps.change-log.outputs.changelog }}
         run: |
           set -euo pipefail
           : "${TAG:?missing tag_name output}"
-          echo "${{ steps.change-log.outputs.changelog }}" > changelog
-          assets=""  # Empty by default
-          [[ "${{ inputs['pypi-publish'] }}" == 'true' ]] && assets="dist/*"
+          printf '%s\n' "$CHANGELOG" > changelog
           gh release create "${TAG}" \
             --title "${{ vars.PACKAGE_NAME }}-${TAG}-rc${{ github.run_number }}" \
-            --notes-file changelog ${assets}
+            --notes-file changelog dist/*

@@ -10,7 +10,6 @@ configurations {
 
 ext {
   sourceRoot = "${rootDir}/src"
-  gradleDir = "${rootDir}/gradle"
   buildDir = "${project.projectDir}/build"
   application = "${sourceRoot}/main/__main__.py"
   versionFile = "${sourceRoot}/main/askai/.version"
