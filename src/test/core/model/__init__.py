@@ -1,11 +1,36 @@
 # _*_ coding: utf-8 _*_
 #
-# hspylib-askai v1.2.19
+# $app_name v2.0.0
 #
 # Package: test.core.model
 """Package initialization."""
 
+import importlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .test_acc_response import TEST_DIR
+    from .test_acc_response import TestClass
+
+
+_EXPORTS = {
+    'TEST_DIR': ('test_acc_response', 'TEST_DIR'),
+    'TestClass': ('test_acc_response', 'TestClass')
+}
+
+def __getattr__(name):
+    if name in _EXPORTS:
+        module, attr = _EXPORTS[name]
+        mod = importlib.import_module(f"{__name__}.{module}")
+        value = getattr(mod, attr)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
-    'test_acc_response', 
+    'TEST_DIR',
+    'TestClass',
+    'test_acc_response'
 ]
-__version__ = '1.2.19'
+__version__ = '2.0.0'

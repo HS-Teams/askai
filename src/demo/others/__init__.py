@@ -1,17 +1,17 @@
 # _*_ coding: utf-8 _*_
 #
-# hspylib-askai v1.2.19
+# $app_name v2.0.0
 #
 # Package: demo.others
 """Package initialization."""
 
+
+
 __all__ = [
-    'commander_demo', 
-    'deepl_demo', 
-    'screenshot_demo', 
-    'spinner_demo', 
-    'tech_week_demo', 
-    'translate_demo', 
-    'vision_model_demos'
+    'commander_demo',
+    'deepl_demo',
+    'screenshot_demo',
+    'tech_week_demo',
+    'translate_demo'
 ]
-__version__ = '1.2.19'
+__version__ = '2.0.0'

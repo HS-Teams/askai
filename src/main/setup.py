@@ -31,7 +31,7 @@ REQUIREMENTS = list(filter(None, (HERE / "requirements.txt").read_text().splitli
 # This call to setup() does all the work
 setuptools.setup(
     name="hspylib-askai",
-    version="1.2.19",
+    version="2.0.0",
     description="HomeSetup - AskAI",
     author="Hugo Saporetti Junior",
     author_email="yorevs@hotmail.com",
