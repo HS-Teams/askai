@@ -116,11 +116,11 @@ class CacheService(metaclass=Singleton):
 
     @staticmethod
     def audio_file_path(text: str, voice: str = "onyx", audio_format: str = "mp3") -> tuple[str, bool]:
-        """Retrieve the hashed audio file path and determine whether the file already exists.
+        """Retrieve the hashed audio filepath and determine whether the file already exists.
         :param text: The text that the audio represents.
         :param voice: The AI voice used for speech synthesis (default is "onyx").
         :param audio_format: The audio file format (default is "mp3").
-        :return: A tuple containing the hashed file path as a string and a boolean indicating if the file exists.
+        :return: A tuple containing the hashed filepath as a string and a boolean indicating if the file exists.
         """
         if not configs.is_cache:
             from askai.core.support.cache_policy import transient_audio_path
@@ -210,7 +210,7 @@ class CacheService(metaclass=Singleton):
                     )
                 )
 
-    def load_input_history(self, predefined: list[str] = None) -> list[str]:
+    def load_input_history(self, predefined: list[str] | None = None) -> list[str]:
         """Load input queries from the history file, extending it with a predefined input history.
         :param predefined: A list of predefined input queries to be appended to the final list.
         :return: A list of input queries loaded from the cache.
@@ -221,7 +221,7 @@ class CacheService(metaclass=Singleton):
         history.extend(self.read_input_history())
         return history
 
-    def save_context(self, context: list[str] = None) -> None:
+    def save_context(self, context: list[str] | None = None) -> None:
         """Save the context window entries into the context file.
         :param context: A list of context entries to be saved.
         """
@@ -230,6 +230,7 @@ class CacheService(metaclass=Singleton):
         if context := (context or list()):
             with open(str(ASKAI_CONTEXT_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
                 list(map(lambda h: f_hist.write(h + "\n"), context))
+        return None
 
     def read_context(self) -> list[str]:
         """Read the context window entries from the context file.
@@ -240,7 +241,7 @@ class CacheService(metaclass=Singleton):
         context: str = ASKAI_CONTEXT_FILE.read_text()
         return list(filter(str.__len__, map(str.strip, re.split(r"(human|assistant|system):", context, flags=flags))))
 
-    def save_memory(self, memory: list[Message] = None) -> None:
+    def save_memory(self, memory: list[Message] | None = None) -> None:
         """Save the context window entries into the context file.
         :param memory: A list of memory entries to be saved.
         """
@@ -253,6 +254,7 @@ class CacheService(metaclass=Singleton):
         if memory := [message for message in (memory or []) if message.recordable]:
             with open(str(ASKAI_MEMORY_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
                 list(map(lambda m: f_hist.write(f"{_get_role_(m)}: {m.content}\n"), memory))
+        return None
 
     def read_memory(self) -> list[str]:
         """Reads and parses the memory from the context file.
