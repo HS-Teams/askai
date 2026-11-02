@@ -9,6 +9,10 @@ import subprocess
 import psutil
 
 
+class PlaybackEnded(RuntimeError):
+    """The owned media process ended before a control could be applied."""
+
+
 class MediaPlayer:
     def __init__(self, storage: Path):
         self.storage = storage / "playback"
@@ -101,7 +105,7 @@ class MediaPlayer:
         with self._locked():
             process = self._active()
             if process is None:
-                raise RuntimeError("No active AskAI media playback")
+                raise PlaybackEnded("No active AskAI media playback")
             try:
                 if action == "stop":
                     self._stop(process)
@@ -112,7 +116,7 @@ class MediaPlayer:
                     process.resume()
             except psutil.NoSuchProcess as error:
                 self.state_file.unlink(missing_ok=True)
-                raise RuntimeError("Playback has already ended") from error
+                raise PlaybackEnded("Playback has already ended") from error
             return {
                 "player": "ffplay",
                 "state": {"play": "playing", "pause": "paused", "stop": "stopped"}[
@@ -126,7 +130,15 @@ class MediaPlayer:
             if process is None:
                 return None
             state = json.loads(self.state_file.read_text())
-            return {**state, "state": "paused" if process.status() == psutil.STATUS_STOPPED else "playing"}
+            try:
+                status = process.status()
+            except psutil.NoSuchProcess:
+                self.state_file.unlink(missing_ok=True)
+                return None
+            if status == psutil.STATUS_ZOMBIE:
+                self.state_file.unlink(missing_ok=True)
+                return None
+            return {**state, "state": "paused" if status == psutil.STATUS_STOPPED else "playing"}
 
     @staticmethod
     def volume(change: int = 0) -> int:

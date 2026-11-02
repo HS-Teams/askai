@@ -6,9 +6,10 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 from askai.core.capabilities.desktop import DesktopCapabilities
+from askai.core.capabilities.media_player import PlaybackEnded
 
 FEEDBACK_SECONDS = 0.4
-CONTROLS = [('p', 'Play'), ('a', 'Pause'), ('s', 'Stop'),
+CONTROLS = [('p', 'Resume playback'), ('a', 'Pause playback'), ('s', 'Stop playback'),
             ('+', 'Volume up'), ('-', 'Volume down'), ('q', 'Close')]
 
 
@@ -30,7 +31,7 @@ def show_player(player, console, read, translate):
     controls = '  '.join(f'[{key}] {translate(label)}' for key, label in CONTROLS)
 
     def line():
-        return Text(translate(status['state']) + ' · ' + translate('System volume') +
+        return Text(translate({'playing': 'Media playing', 'paused': 'Media paused'}[status['state']]) + ' · ' + translate('System volume') +
                     f": {player.volume()}% · " + controls, style='cyan', no_wrap=True, overflow='ellipsis')
 
     with Live(line(), console=console, auto_refresh=False) as live:
@@ -42,7 +43,11 @@ def show_player(player, console, read, translate):
             if action in ('+', '-'):
                 player.volume(5 if action == '+' else -5)
             elif action in ('p', 'a', 's'):
-                player.control({'p': 'play', 'a': 'pause', 's': 'stop'}[action])
+                try:
+                    player.control({'p': 'play', 'a': 'pause', 's': 'stop'}[action])
+                except PlaybackEnded:
+                    live.update(Text(translate('Playback has ended')), refresh=True)
+                    return
             else:
                 label = 'Unknown playback control'
             live.update(Text(translate(label), style='bold yellow'), refresh=True)
