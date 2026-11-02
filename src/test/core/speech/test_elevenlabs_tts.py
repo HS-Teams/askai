@@ -100,7 +100,7 @@ class ElevenLabsTests(unittest.TestCase):
         self.cache.audio_file_path.assert_not_called()
         self.assertEqual(list(self.root.iterdir()), [])
 
-    def test_quota_failure_switches_to_ollama_and_still_serves_cached_primary_audio(self):
+    def test_quota_failure_uses_active_fallback_even_when_primary_audio_is_cached(self):
         path = self.engine.synthesize('cached', playback=False)
         self.response.status_code = 401
         fallback = Mock()
@@ -108,11 +108,41 @@ class ElevenLabsTests(unittest.TestCase):
         wrapper.initialize()
         count = self.request.call_count
         self.assertEqual(wrapper.provider_name, 'Ollama (fallback)')
-        self.assertEqual(wrapper.synthesize('cached', playback=False), path)
-        fallback.synthesize.assert_not_called()
+        result = wrapper.synthesize('cached', playback=False)
+        self.assertEqual(result, fallback.synthesize.return_value)
+        self.assertNotEqual(result, path)
+        fallback.synthesize.assert_called_once_with('cached', '', True, False, None)
+        fallback.synthesize.reset_mock()
         wrapper.synthesize('new', playback=False, voice='voice1')
         fallback.synthesize.assert_called_once_with('new', '', True, False, None)
         self.assertEqual(self.request.call_count, count)
+
+    def test_primary_fallback_and_voice_switches_keep_separate_audio(self):
+        from types import SimpleNamespace
+        from askai.core.engine.llama.llama_speech import LlamaSpeech
+        config = SimpleNamespace(base_url='http://localhost:11434', tts_model='phonon',
+                                 tts_voice='Grub the Ogre', tempo=1)
+        client = Mock()
+        client.show.return_value = {'voices': ['Grub the Ogre', 'Zoey']}
+        local = LlamaSpeech(client, config)
+        local._generate = Mock(side_effect=lambda text, voice, path: path.write_bytes(voice.encode()))
+        primary_path = self.engine.synthesize('same text', playback=False)
+        with patch.object(self.engine, 'probe', side_effect=AgentError('offline')), patch.dict(
+                'sys.modules', {'askai.core.component.cache_service': SimpleNamespace(cache=self.cache)}):
+            wrapper = FallbackTTS(self.engine, lambda: local, Mock())
+            first = wrapper.synthesize('same text', playback=False)
+            self.assertNotEqual(first, primary_path)
+            self.assertEqual(wrapper.synthesize('same text', playback=False), first)
+            local._generate.assert_called_once()
+            local.select_voice('Zoey')
+            second = wrapper.synthesize('same text', playback=False)
+            self.assertNotEqual(second, first)
+            self.assertEqual(second.read_bytes(), b'Zoey')
+            self.assertEqual(local._generate.call_count, 2)
+        with patch.object(self.engine, 'probe'), patch.object(self.engine, 'select_voice'):
+            wrapper.select_voice('voice1')
+        self.assertEqual(wrapper.synthesize('same text', playback=False), primary_path)
+        self.request.assert_called_once()
 
     def test_bad_responses_never_publish_cache(self):
         for status, content_type, audio in ((429, 'audio/pcm', b'ab'), (200, 'application/json', b'{}'),

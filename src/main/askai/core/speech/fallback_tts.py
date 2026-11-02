@@ -1,6 +1,5 @@
 """Prefer verified primary speech, retaining the existing Ollama implementation."""
 import logging
-from pathlib import Path
 from threading import RLock
 from askai.core.agents.contracts import AgentError
 
@@ -103,11 +102,8 @@ class FallbackTTS:
             return None
         self.initialize()
         try:
-            cached = getattr(self._primary, 'cached_audio', None)
-            path = cached(text, voice) if callable(cached) and self._active is not self._primary else None
-            if not isinstance(path, Path):
-                path = self._active.synthesize(text, prefix, stream, False,
-                                               voice if self._active is self._primary else None)
+            path = self._active.synthesize(text, prefix, stream, False,
+                                           voice if self._active is self._primary else None)
         except (AgentError, OSError, ValueError, KeyError) as error:
             if self._active is not self._primary:
                 raise
