@@ -1,6 +1,6 @@
 # _*_ coding: utf-8 _*_
 #
-# $app_name v2.0.0
+# $app_name v2.0.1
 #
 # Package: main.askai.core.component.faces
 """Package initialization."""
@@ -79,4 +79,4 @@ __all__ = [
     'selections',
     'service'
 ]
-__version__ = '2.0.0'
+__version__ = '2.0.1'

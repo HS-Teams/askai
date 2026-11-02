@@ -1,6 +1,6 @@
 # _*_ coding: utf-8 _*_
 #
-# $app_name v2.0.0
+# $app_name v2.0.1
 #
 # Package: main.askai.core.component.multimedia
 """Package initialization."""
@@ -51,4 +51,4 @@ __all__ = [
     'recorder',
     'screenshot'
 ]
-__version__ = '2.0.0'
+__version__ = '2.0.1'

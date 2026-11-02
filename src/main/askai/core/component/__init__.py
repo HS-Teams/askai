@@ -1,6 +1,6 @@
 # _*_ coding: utf-8 _*_
 #
-# $app_name v2.0.0
+# $app_name v2.0.1
 #
 # Package: main.askai.core.component
 """Package initialization."""
@@ -159,4 +159,4 @@ __all__ = [
     'search_presentation',
     'summarizer'
 ]
-__version__ = '2.0.0'
+__version__ = '2.0.1'

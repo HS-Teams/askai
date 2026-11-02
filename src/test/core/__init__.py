@@ -1,6 +1,6 @@
 # _*_ coding: utf-8 _*_
 #
-# $app_name v2.0.0
+# $app_name v2.0.1
 #
 # Package: test.core
 """Package initialization."""
@@ -61,4 +61,4 @@ __all__ = [
     'model',
     'support'
 ]
-__version__ = '2.0.0'
+__version__ = '2.0.1'

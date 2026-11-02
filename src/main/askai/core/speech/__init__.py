@@ -1,6 +1,6 @@
 # _*_ coding: utf-8 _*_
 #
-# $app_name v2.0.0
+# $app_name v2.0.1
 #
 # Package: main.askai.core.speech
 """Package initialization."""
@@ -113,4 +113,4 @@ __all__ = [
     'service',
     'timing'
 ]
-__version__ = '2.0.0'
+__version__ = '2.0.1'
