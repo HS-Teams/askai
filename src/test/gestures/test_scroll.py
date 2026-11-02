@@ -38,14 +38,14 @@ class ScrollTests(unittest.TestCase):
         self.assertFalse(control.update([]).scrolling)
 
 
-    def test_scroll_thumb_exit_requires_continuous_second_and_stops_scrolling(self):
+    def test_scroll_rock_exit_requires_continuous_hold_and_stops_scrolling(self):
         clock = Mock(return_value=0.)
         control = GestureController(clock)
         control.update(fingers())
         other = fingers()
         other[8] = (.35, .75)
         other[4] = (.8, .8)
-        with patch('askai.gestures.controller.is_thumbs_up', return_value=True):
+        with patch('askai.gestures.controller.is_rock_hand', return_value=True):
             first = control.update(other)
             self.assertTrue(first.scrolling)
             self.assertFalse(first.exit_requested)

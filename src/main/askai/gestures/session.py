@@ -46,6 +46,9 @@ def run_session(camera, tracker, pointer, view, policy, notify=lambda kind: None
             policy.pending(GRANTS)  # Recheck denials; 'ask' was authorized for this session.
             if not state.dragging:
                 pointer.release()
+            if state.double_click_requested:
+                pointer.double_click()
+                notify('double_click')
             if state.voice_requested:
                 notify('voice')
             if state.escape_requested:

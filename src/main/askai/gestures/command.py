@@ -14,7 +14,8 @@ MESSAGES = {
     'pinch': 'Pinch recognized: mouse button held.',
     'release': 'Pinch released.',
     'escape': 'Open palm recognized: Escape sent.',
-    'exit': 'Thumbs up recognized: stopping gesture control.',
+    'exit': 'Rock hand recognized: stopping gesture control.',
+    'double_click': 'Thumbs up recognized: double-click sent.',
     'stopped': 'Gesture control stopped.',
     'failed': 'Gesture control failed. See logs/gestures.log for details.',
 }
@@ -34,10 +35,16 @@ def start(camera_index=0):
     labels = {text: msg.t(text) for text in Preview.LABELS}
 
     def notify(kind):
+        from askai.gestures.sfx import play_init, play_quit, play_ptt
+        if kind == 'started':
+            play_init()
+        elif kind == 'exit':
+            play_quit()
         if kind == 'voice':
+            play_ptt()
             events.voice_input.emit()
             return
         message = MESSAGES[kind]
-        events.reply.emit(reply=AIReply.info(message, speakable=False))
+        events.reply.emit(reply=AIReply.system(message))
 
     return launch(camera_index, askai_data_dir(), labels, notify)

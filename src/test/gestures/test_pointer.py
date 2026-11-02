@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace as NS
 from unittest.mock import Mock, patch
 import numpy as np
 from askai.gestures.controller import GestureState
@@ -6,6 +7,11 @@ from askai.gestures.preview import Pointer, Preview
 
 
 class PointerTests(unittest.TestCase):
+    def setUp(self):
+        sound = patch('askai.gestures.sfx._play')
+        sound.start()
+        self.addCleanup(sound.stop)
+
     def test_scroll_edges_send_mac_document_navigation(self):
         pointer = Pointer.__new__(Pointer)
         pointer._send_key = Mock()
@@ -20,7 +26,7 @@ class PointerTests(unittest.TestCase):
     def test_drag_events_and_release_are_idempotent(self):
         pointer = Pointer.__new__(Pointer)
         pointer._mouse = Mock()
-        pointer._size = (100, 100)
+        pointer._screens = [NS(origin=NS(x=0, y=0), size=NS(width=100, height=100))]
         pointer._pressed = False
         pointer._position = None
         quartz = Mock()

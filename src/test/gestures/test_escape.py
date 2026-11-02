@@ -15,6 +15,11 @@ def palm():
 
 
 class EscapeTests(unittest.TestCase):
+    def setUp(self):
+        sound = patch('askai.gestures.sfx._play')
+        sound.start()
+        self.addCleanup(sound.stop)
+
     def test_one_escape_per_palm_hold_without_exit(self):
         controller = GestureController(Mock(side_effect=[0, .25, .5, 2, 3, 3.5]))
         states = [controller.update(palm()) for _ in range(4)]
