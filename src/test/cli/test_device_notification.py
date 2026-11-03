@@ -24,7 +24,7 @@ class DeviceNotificationTests(unittest.TestCase):
                 pending = []
                 with patch.dict('sys.modules', {
                     'askai.core.support.text_formatter': SimpleNamespace(text_formatter=formatter),
-                    'askai.cli.prompt_input': SimpleNamespace(present=pending.append),
+                    'askai.cli.prompt_input': SimpleNamespace(present_notice=lambda console, notice: pending.append(lambda: console.print(notice))),
                 }):
                     scope[method.name](view, SimpleNamespace(args=SimpleNamespace(device=(1, 'Microphone'))))
                 if filename.startswith('core'):

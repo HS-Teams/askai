@@ -3,6 +3,8 @@ from askai.cli.suggestions import input_suggestion
 from queue import Empty, Queue
 from threading import RLock, Event
 from hspylib.modules.cli.keyboard import Keyboard
+from hspylib.core.tools import commons
+from rich.control import Control
 import select
 import sys
 import termios
@@ -20,6 +22,15 @@ def present(action):
             _active.messages.put(action)
             return
     action()
+
+
+def present_notice(console, notice):
+    """Publish prepared text without racing the activation of a new prompt."""
+    with _lock:
+        if _active is not None:
+            _active.messages.put(lambda: console.print(notice))
+        else:
+            console.print(notice)
 
 
 def request_voice():
@@ -75,13 +86,16 @@ class PromptInput(KeyboardInput):
             except Empty:
                 return
             self.cursor.move(self._offset[0], Direction.UP)
-            self.cursor.move(self._offset[1], Direction.LEFT)
-            self.write('\r')
+            # Use the editor's console: stdout may be redirected through Rich's FileProxy.
+            commons.console_out.control(Control.move_to_column(0))
             self.cursor.erase(Direction.DOWN)
+            self.cursor.position = (self.cursor.position[0], 0)
             self._offset = (0, 0)
             try:
                 action()
             finally:
+                # Replies use Rich directly and do not update the editor's cursor model.
+                self.cursor.position = (self.cursor.position[0], 0)
                 self._offset = (0, 0)
                 self.render()
 

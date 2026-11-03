@@ -195,8 +195,11 @@ class AskAiCli(AskAi):
             log.debug('Gesture voice input ignored: no empty question prompt is active')
 
     def _cb_reply_event(self, ev: Event) -> None:
-        if not self._ready and ev.args.reply and ev.args.reply.is_system:
-            self._startup_notices.put(ev)
+        if ev.args.reply and ev.args.reply.is_system:
+            if not self._ready:
+                self._startup_notices.put(ev)
+            else:
+                self._display_reply_event(ev)
             return
         from askai.cli.prompt_input import present
         present(lambda: self._display_reply_event(ev))
@@ -210,9 +213,10 @@ class AskAiCli(AskAi):
             if reply.is_system:
                 from rich.text import Text
                 from askai.core.support.text_formatter import text_formatter
+                from askai.cli.prompt_input import present_notice
                 notice = Text("  " + msg.t("System") + ": ", style="bold yellow")
                 notice.append(msg.translate(reply.message).strip(), style="default")
-                text_formatter.console.print(notice)
+                present_notice(text_formatter.console, notice)
                 return
             if reply.is_error:
                 self._reply_error(reply)
@@ -251,11 +255,11 @@ class AskAiCli(AskAi):
         """
         from rich.text import Text
         from askai.core.support.text_formatter import text_formatter
-        from askai.cli.prompt_input import present
+        from askai.cli.prompt_input import present_notice
 
         notice = Text("  " + msg.t("System") + ": ", style="bold yellow")
         notice.append(msg.translate(msg.device_switch(str(ev.args.device))).strip(), style="default")
-        present(lambda: text_formatter.console.print(notice))
+        present_notice(text_formatter.console, notice)
 
     def _splash(self) -> None:
         """Display the splash before the startup loader takes over the terminal."""
