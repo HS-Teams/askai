@@ -30,6 +30,39 @@ def cache_service(root, enabled):
 
 
 class HistoryStorageTests(unittest.TestCase):
+    def test_commands_are_saved_and_restored_without_duplicates(self):
+        with TemporaryDirectory() as directory:
+            cache, scope = cache_service(Path(directory), True)
+            cache.save_input_history(['/gestures', '/gestures stop', '/gestures', 'hello'])
+            self.assertEqual(cache.read_input_history(),
+                             ['existing', '/gestures stop', '/gestures', 'hello'])
+            self.assertEqual(scope['ASKAI_INPUT_HISTORY_FILE'].read_text().splitlines(),
+                             cache.read_input_history())
+
+    def test_repeated_command_is_most_recent_after_reload(self):
+        from unittest.mock import patch
+        from askai.cli.prompt_input import PromptInput
+        from clitt.core.tui.line_input.keyboard_input import KeyboardInput
+        with TemporaryDirectory() as directory:
+            cache, scope = cache_service(Path(directory), True)
+            cache.save_input_history(['/gestures', '/info'])
+            cache.save_input_history(['/gestures'])
+            self.assertEqual(cache.read_input_history(), ['existing', '/info', '/gestures'])
+            with patch.object(KeyboardInput, '_HISTORY', ['']):
+                KeyboardInput.preload_history(cache.read_input_history())
+                editor = PromptInput('', '')
+                self.assertEqual(editor._prev_in_history(), '/gestures')
+                self.assertEqual(editor._prev_in_history(), '/info')
+
+    def test_commands_entered_while_off_do_not_leak_when_history_is_enabled(self):
+        with TemporaryDirectory() as directory:
+            cache, scope = cache_service(Path(directory), False)
+            cache.save_input_history(['/private command'])
+            self.assertEqual(scope['ASKAI_INPUT_HISTORY_FILE'].read_text(), 'existing')
+            scope['configs'].is_keep_context = True
+            cache.save_input_history(['/private command', '/gestures'])
+            self.assertEqual(cache.read_input_history(), ['existing', '/gestures'])
+
     def test_off_skips_history_reads_and_writes(self):
         with TemporaryDirectory() as directory:
             cache, scope = cache_service(Path(directory), False)

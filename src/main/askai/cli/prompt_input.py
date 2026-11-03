@@ -38,7 +38,8 @@ class PromptInput(KeyboardInput):
         self.voice_requested = Event()
 
     def _render_suggestions(self):
-        candidate = input_suggestion(self.text, self._HISTORY,
+        # KeyboardInput reserves the last history entry for the current draft.
+        candidate = input_suggestion(self.text, self._HISTORY[:-1],
                                      case_sensitive=not self._case_insensitive)
         hint = candidate[len(self.text):] if candidate else ''
         self.cursor.erase(Direction.DOWN)

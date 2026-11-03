@@ -96,6 +96,7 @@ class AskAiCli(AskAi):
         signal.signal(signal.SIGTERM, self.abort)  # Handle termination requests
         signal.signal(signal.SIGHUP, self.abort)  # Handle terminal hangup
         while question := (self._query_string or self._input()):
+            cache.save_input_history([question])
             status, output = self.ask_and_reply(question)
             if not status:
                 question = None
@@ -103,7 +104,6 @@ class AskAiCli(AskAi):
             elif output:
                 if getattr(self.mode.processor, "cacheable", True):
                     cache.save_reply(self._reply_cache_key, output)
-                cache.save_input_history()
                 # FIXME This is only writing the final answer to the markdown file.
                 with open(self.console_path, "a+", encoding=Charset.UTF_8.val) as f_console:
                     f_console.write(f"{shared.username_md}{question}\n\n")

@@ -200,13 +200,17 @@ class CacheService(metaclass=Singleton):
         if not configs.is_keep_context:
             self._private_inputs.update(inputs)
             return
-        history = list(dict.fromkeys(self.read_input_history() + [item for item in inputs if item not in self._private_inputs]))
+        history = dict.fromkeys(self.read_input_history())
+        for item in inputs:
+            if item and item not in self._private_inputs:
+                history.pop(item, None)
+                history[item] = None
         if history:
             with open(str(ASKAI_INPUT_HISTORY_FILE), "w", encoding=Charset.UTF_8.val) as f_hist:
                 list(
                     map(
                         lambda h: f_hist.write(h + "\n"),
-                        filter(lambda h: not h.startswith("/"), history),
+                        filter(None, history),
                     )
                 )
 
