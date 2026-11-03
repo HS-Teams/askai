@@ -95,6 +95,10 @@ class AskAiConfigs(metaclass=Singleton):
         settings.put("askai.speak.enabled", which("ffplay") and value)
 
     @property
+    def is_sfx_muted(self) -> bool:
+        return settings.get_bool("askai.sfx.muted")
+
+    @property
     def is_debug(self) -> bool:
         return settings.get_bool("askai.debug.enabled")
 

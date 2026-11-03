@@ -17,7 +17,7 @@ def capture_screenshot(cancelled: Event) -> str | None:
         if cancelled.is_set():
             return None
         events.reply.emit(reply=AIReply.mute(msg.t(f"Screenshot in: {remaining}")), erase_last=remaining != 3)
-        player.play_sfx('click')
+        player.play_sfx('ui/click')
         pause.seconds(1)
     if cancelled.is_set():
         return None
@@ -34,7 +34,7 @@ def capture_screenshot(cancelled: Event) -> str | None:
         raise
     finally:
         screenshot.close()
-    player.play_sfx('camera-shutter')
+    player.play_sfx('ui/camera-shutter')
     events.reply.emit(reply=AIReply.mute(msg.click()), erase_last=True)
     events.reply.emit(reply=AIReply.debug(msg.screenshot_saved(str(target))))
     return str(target)

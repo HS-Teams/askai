@@ -46,6 +46,12 @@ class SettingsCmd(ABC):
             name = all_settings[int(name)].name
         if settings[name]:
             settings.put(name, value if value not in ["''", '""'] else None)
+            if name == 'askai.sfx.muted':
+                from askai.core.speech.effects import set_muted
+                from askai.gestures.background import set_sfx_muted
+                muted = settings.get_bool(name)
+                set_muted(muted)
+                set_sfx_muted(muted)
             if announce:
                 text_formatter.commander_print(f"Setting `{name}` changed to %GREEN%{value}%NC%")
         else:
@@ -69,6 +75,7 @@ class SettingsCmd(ABC):
         # Command arguments settings must be kept as it was.
         is_interactive: bool = settings.get_bool("askai.interactive.enabled")
         is_speak: bool = settings.get_bool("askai.speak.enabled")
+        is_sfx_muted: bool = settings.get_bool("askai.sfx.muted")
         is_debug: bool = settings.get_bool("askai.debug.enabled")
         is_cache: bool = settings.get_bool("askai.cache.enabled")
         settings.defaults()
@@ -76,6 +83,7 @@ class SettingsCmd(ABC):
         # Put back the command argument settings.
         settings.put("askai.interactive.enabled", is_interactive)
         settings.put("askai.speak.enabled", is_speak)
+        settings.put("askai.sfx.muted", is_sfx_muted)
         settings.put("askai.debug.enabled", is_debug)
         settings.put("askai.cache.enabled", is_cache)
         text_formatter.commander_print(f"%GREEN%Factory settings reset!%NC%")

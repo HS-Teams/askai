@@ -30,7 +30,7 @@ class ScreenshotCaptureTests(unittest.TestCase):
             self.assertEqual(Path(target).suffix, '.jpeg')
             self.assertEqual(Path(target).read_bytes(), b'jpeg')
             sounds = modules['askai.core.component.multimedia.audio_player'].player.play_sfx
-            self.assertEqual([c.args[0] for c in sounds.call_args_list], ['click', 'click', 'click', 'camera-shutter'])
+            self.assertEqual([c.args[0] for c in sounds.call_args_list], ['ui/click', 'ui/click', 'ui/click', 'ui/camera-shutter'])
             labels = modules['askai.core.askai_messages'].msg.t
             self.assertEqual([c.args[0] for c in labels.call_args_list], ['Screenshot in: 3', 'Screenshot in: 2', 'Screenshot in: 1'])
             self.assertEqual(order.mock_calls[3][0], 'capture')
@@ -57,4 +57,4 @@ class ScreenshotCaptureTests(unittest.TestCase):
             with patch.dict(sys.modules, modules), self.assertRaises(OSError):
                 capture_screenshot(Event())
             self.assertEqual(list(Path(folder).iterdir()), [])
-            self.assertNotIn('camera-shutter', [c.args[0] for c in modules['askai.core.component.multimedia.audio_player'].player.play_sfx.call_args_list])
+            self.assertNotIn('ui/camera-shutter', [c.args[0] for c in modules['askai.core.component.multimedia.audio_player'].player.play_sfx.call_args_list])

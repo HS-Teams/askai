@@ -196,7 +196,7 @@ class GestureActionManager:
                         self.draw_styled_landmarks(image, results)
 
                         if frame_num == 0:
-                            threading.Thread(target=player.play_sfx, args=("beep-new-1s",)).start()
+                            threading.Thread(target=player.play_sfx, args=("ui/beep-new-1s",)).start()
                             self.display(image, "STARTING COLLECTION", (120, 120), TITLE)
                             self.display(
                                 image, f'Collecting frames for "{action}" Video: # {video_num}', (120, 60), SUB_TITLE

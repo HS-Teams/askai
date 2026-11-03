@@ -3,7 +3,7 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).parents[3] / 'main/askai'
 
@@ -60,6 +60,39 @@ class SettingCommandTests(unittest.TestCase):
         self.store.__getitem__.return_value = None
         self.setter.set('unknown', True)
         self.store.put.assert_not_called()
+
+    def test_mute_persists_only_effect_setting_and_updates_live_players(self):
+        for muted in (False, True):
+            with self.subTest(muted=muted), patch('askai.core.speech.effects.set_muted') as local, patch(
+                    'askai.gestures.background.set_sfx_muted') as worker:
+                self.store.reset_mock()
+                self.store.get_bool.return_value = not muted
+                config = SimpleNamespace(is_sfx_muted=muted, is_speak=True)
+                callback = load_definition('core/commander/commander.py', 'mute', dict(
+                    SettingsCmd=self.setter, configs=config, text_formatter=self.output, color_bool=str))
+                callback()
+                self.store.put.assert_called_once_with('askai.sfx.muted', not muted)
+                local.assert_called_once_with(not muted)
+                worker.assert_called_once_with(not muted)
+                self.assertTrue(config.is_speak)
+
+    def test_startup_adds_mute_default_without_resetting_saved_preferences(self):
+        tree = ast.parse((ROOT / 'core/askai_settings.py').read_text())
+        node = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == '__init__')
+        for saved in (None, False, True):
+            with self.subTest(saved=saved):
+                values = {'askai.settings.version.id': '0.4.3', 'askai.speak.enabled': True}
+                if saved is not None:
+                    values['askai.sfx.muted'] = saved
+                instance = SimpleNamespace(__RESOURCE_DIR='unused', __ACTUAL_VERSION='0.4.3',
+                                           get=lambda key, default='': values.get(key, default),
+                                           put=lambda key, value: values.__setitem__(key, value), defaults=MagicMock())
+                namespace = dict(SettingsConfig=MagicMock(), Settings=lambda _: SimpleNamespace(count=lambda: 1))
+                exec(compile(ast.Module(body=[node], type_ignores=[]), '<settings-init>', 'exec'), namespace)
+                namespace['__init__'](instance)
+                self.assertEqual(values['askai.sfx.muted'], saved if saved is not None else False)
+                self.assertTrue(values['askai.speak.enabled'])
+                instance.defaults.assert_not_called()
 
     def test_setting_confirmation_remains_default_but_can_be_suppressed(self):
         self.setter.set('askai.speak.enabled', True)

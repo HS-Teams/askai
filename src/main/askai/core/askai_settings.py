@@ -58,6 +58,7 @@ class AskAiSettings(metaclass=Singleton):
             self.defaults()
         from askai.core.component.faces.models import DEFAULT_THRESHOLD
         for key, value in {
+            "askai.sfx.muted": False,
             "askai.speech.tts.engine": "ElevenLabs",
             "askai.speech.stt.whisper.model": "small",
             "askai.elevenlabs.tts.model": "eleven_v4",
@@ -121,6 +122,7 @@ class AskAiSettings(metaclass=Singleton):
         self._settings.put("askai.settings.version.id", "askai", self.__ACTUAL_VERSION)
         self._settings.put("askai.debug.enabled", "askai", False)
         self._settings.put("askai.speak.enabled", "askai", False)
+        self._settings.put("askai.sfx.muted", "askai", False)
         self._settings.put("askai.cache.enabled", "askai", True)
         self._settings.put("askai.cache.ttl.minutes", "askai", 25)
         self._settings.put("askai.context.keep.conversation", "askai", True)

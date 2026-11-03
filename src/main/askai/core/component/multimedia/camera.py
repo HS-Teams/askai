@@ -44,7 +44,7 @@ class Camera(metaclass=Singleton):
         """Show each count while reading fresh frames for automatic exposure."""
         for remaining in range(count, 0, -1):
             events.reply.emit(reply=AIReply.mute(msg.smile(remaining)), erase_last=remaining != count)
-            player.play_sfx("click")
+            player.play_sfx("ui/click")
             deadline = monotonic() + 1
             while monotonic() < deadline:
                 ok, frame = self._cam.read()
@@ -64,7 +64,7 @@ class Camera(metaclass=Singleton):
             if not target or not cv2.imwrite(target, frame):
                 raise CameraAccessFailure("Could not save camera image")
             events.reply.emit(reply=AIReply.mute(msg.click()), erase_last=True)
-            player.play_sfx("camera-shutter")
+            player.play_sfx("ui/camera-shutter")
             return target
         finally:
             self.shutdown()

@@ -38,7 +38,7 @@ class CameraCountdownTests(unittest.TestCase):
         self.assertEqual(camera.capture_frame(), '/photos/test-PHOTO.jpg')
         self.assertEqual([c.args[0] for c in scope['msg'].smile.call_args_list], [3, 2, 1])
         self.assertEqual([c.args[0] for c in scope['player'].play_sfx.call_args_list],
-                         ['click', 'click', 'click', 'camera-shutter'])
+                         ['ui/click', 'ui/click', 'ui/click', 'ui/camera-shutter'])
         scope['cv2'].imwrite.assert_called_once_with('/photos/test-PHOTO.jpg', frames[-1])
         self.assertEqual([c[0] for c in timeline.mock_calls],
                          ['initialize', 'sound', 'sound', 'sound', 'save', 'sound', 'shutdown'])
@@ -50,4 +50,4 @@ class CameraCountdownTests(unittest.TestCase):
             camera.capture_frame()
         camera.shutdown.assert_called_once()
         scope['cv2'].imwrite.assert_not_called()
-        self.assertNotIn('camera-shutter', [c.args[0] for c in scope['player'].play_sfx.call_args_list])
+        self.assertNotIn('ui/camera-shutter', [c.args[0] for c in scope['player'].play_sfx.call_args_list])

@@ -36,7 +36,7 @@ class AudioPlayer(metaclass=Singleton):
     INSTANCE: "AudioPlayer"
 
     # Sound effects directory.
-    SFX_DIR = str(classpath.resource_path) + "/sound-fx"
+    SFX_DIR = str(classpath.resource_path) + "/sfx"
 
     @staticmethod
     def play_audio_file(path_to_audio_file: str | Path, tempo: int = 1, loop: float | None = None) -> bool:
@@ -69,7 +69,8 @@ class AudioPlayer(metaclass=Singleton):
         filename = f"{AudioPlayer.SFX_DIR}/{ensure_endswith(filename, file_ext)}"
         check_argument(file_is_not_empty(filename), f"Sound effects file does not exist: {filename}")
 
-        return AudioPlayer.play_audio_file(filename, loop=loop)
+        from askai.core.speech.effects import play
+        return play(filename, loop=loop)
 
     def __init__(self):
         check_argument(which("ffplay") is not None, "ffmpeg::ffplay is required to play audio")
@@ -80,7 +81,7 @@ class AudioPlayer(metaclass=Singleton):
         log.debug("Determining the start delay")
         sample_duration_sec = 1.75  # We know the length
         started = time.time()
-        self.play_sfx("sample.mp3")
+        self.play_sfx("ui/sample.mp3")
         delay = max(0.0, time.time() - started - sample_duration_sec)
         log.debug("Detected a play delay of %s seconds", delay)
 
