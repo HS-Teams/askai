@@ -4,12 +4,26 @@ import json
 import os
 import signal
 import sys
+from threading import Event, Thread
+
+
+def read_controls(stream, paused):
+    for line in stream:
+        if line.strip() == 'pause':
+            paused.set()
+        elif line.strip() == 'resume':
+            paused.clear()
+        elif line.strip() in ('mute_sfx', 'unmute_sfx'):
+            from askai.core.speech.effects import set_muted
+            set_muted(line.strip() == 'mute_sfx')
 
 
 def main():
     parent_pid = os.getppid()
     camera_index, event_fd = map(int, sys.argv[1:3])
     labels = json.loads(sys.argv[3])
+    from askai.core.speech.effects import set_muted
+    set_muted(sys.argv[4] == '1')
     with os.fdopen(event_fd, 'w', buffering=1) as output:
         def notify(kind):
             output.write(json.dumps(kind) + '\n')
@@ -18,6 +32,8 @@ def main():
             raise KeyboardInterrupt
 
         signal.signal(signal.SIGTERM, interrupted)
+        paused = Event()
+        Thread(target=read_controls, args=(sys.stdin, paused), daemon=True).start()
         notify({'type': 'loading', 'stage': 'imports'})
         from askai.gestures.preview import Pointer, Preview
         from askai.gestures.tracker import HandTracker, model_path, pose_model_path
@@ -47,7 +63,7 @@ def main():
             notify('started')
             resources.pop_all()
             run_session(camera, tracker, pointer, view, grants, notify=notify,
-                        should_stop=lambda: os.getppid() != parent_pid)
+                        should_stop=lambda: os.getppid() != parent_pid, should_pause=paused.is_set)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,11 @@
 """OpenCV preview and native mouse adapter; frames stay in memory."""
+from time import monotonic
+
+
 class Pointer:
+    DRAG_SOUND_DISTANCE = 20.
+    GRAB_SOUND_SECONDS = 1.
+
     def __init__(self):
         import ctypes
         import sys
@@ -35,8 +41,10 @@ class Pointer:
             return
         if self._pressed:
             from math import hypot
-            if not self._sound_dragged and (self._sound_origin is None or
-                    hypot(position[0] - self._sound_origin[0], position[1] - self._sound_origin[1]) > 4.):
+            if self._sound_origin is None:
+                self._sound_origin = position
+            if not self._sound_dragged and hypot(position[0] - self._sound_origin[0],
+                                                position[1] - self._sound_origin[1]) >= self.DRAG_SOUND_DISTANCE:
                 from askai.gestures.sfx import play_drag
                 self._sound_dragged = True
                 play_drag()
@@ -57,6 +65,12 @@ class Pointer:
             self._sound_origin = self._position
             self._sound_dragged = False
             self._mouse.mouseDown(_pause=False)
+            self._press_started = monotonic()
+            self._sound_grabbed = False
+        elif not self._sound_grabbed and monotonic() - self._press_started > self.GRAB_SOUND_SECONDS:
+            from askai.gestures.sfx import play_grab
+            self._sound_grabbed = True
+            play_grab()
 
     def release(self):
         if self._pressed:
@@ -73,7 +87,7 @@ class Pointer:
 
     def double_click(self):
         import Quartz
-        from askai.gestures.sfx import play_click
+        from askai.gestures.sfx import play_double_click
         self.release()
         location = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
         for count in (1, 2):
@@ -81,26 +95,24 @@ class Pointer:
                 event = Quartz.CGEventCreateMouseEvent(None, kind, location, Quartz.kCGMouseButtonLeft)
                 Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventClickState, count)
                 Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-            play_click()
+        play_double_click()
 
     def scroll(self, steps):
-        self._mouse.scroll(steps, _pause=False)
+        import Quartz
+        event = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 1, steps)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
 
     def scroll_boundary(self, edge):
         import Quartz
         self._send_key(126 if edge == 'top' else 125, Quartz.kCGEventFlagMaskCommand)
-
-    def escape(self):
-        self._send_key(53, 0)
-        from askai.gestures.sfx import play_escape
-        play_escape()
 
     def _send_key(self, key, flags):
         import AppKit
         import Quartz
         application = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
         if application is None:
-            raise RuntimeError('No focused application to receive Escape')
+            raise RuntimeError('No focused application to receive scrolling')
         pid = application.processIdentifier()
         for pressed in (True, False):
             event = Quartz.CGEventCreateKeyboardEvent(None, key, pressed)
@@ -112,7 +124,7 @@ class Preview:
     TITLE = 'AskAI Gestures'
     INITIAL_SIZE = (80, 60)
     LABELS = ('Scroll', 'No hand', 'Drag', 'Pinch', 'Move', 'Esc: stop', 'Hold thumbs up to stop',
-              'Hold heavy metal for 1s to send Esc', 'Hold open palm for 1s to double-click', 'Hold phone gesture for voice',
+              'Hold heavy metal for 0.5s to abort', 'Hold open palm for 0.5s to double-click', 'Hold phone gesture for voice',
               'Waist not visible')
 
     def __init__(self, translate):
@@ -139,11 +151,11 @@ class Preview:
             label = 'Waist not visible'
         self.cv.putText(frame, self._labels[label] + ' | ' + self._labels['Esc: stop'], (12, 28),
                        self.cv.FONT_HERSHEY_SIMPLEX, .7, (0, 255, 0), 2)
-        progress = state.exit_progress if state.exit_progress is not None else state.escape_progress
-        progress_label = 'Hold thumbs up to stop' if state.exit_progress is not None else 'Hold heavy metal for 1s to send Esc'
+        progress = state.exit_progress if state.exit_progress is not None else state.abort_progress
+        progress_label = 'Hold thumbs up to stop' if state.exit_progress is not None else 'Hold heavy metal for 0.5s to abort'
         if state.double_click_progress is not None:
             progress = state.double_click_progress
-            progress_label = 'Hold open palm for 1s to double-click'
+            progress_label = 'Hold open palm for 0.5s to double-click'
         if state.voice_progress is not None:
             progress = state.voice_progress
             progress_label = 'Hold phone gesture for voice'

@@ -65,8 +65,10 @@ class SharedInstances(metaclass=Singleton):
         return self._speech
 
     def listen(self):
-        self.speech.cancel_output()
-        _, text = recorder.listen(language=configs.stt_language)
+        from askai.gestures.background import pause_for_ptt
+        with pause_for_ptt():
+            self.speech.cancel_output()
+            _, text = recorder.listen(language=configs.stt_language)
         return text.strip() if text else None
 
     @property

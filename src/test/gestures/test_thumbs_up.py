@@ -1,3 +1,4 @@
+from landmark_fixtures import POINTER_WAIST
 from landmark_fixtures import detection, world_points
 import unittest
 from unittest.mock import Mock, patch
@@ -25,20 +26,20 @@ class ThumbsUpTests(unittest.TestCase):
     def test_gesture_must_remain_strictly_up_for_full_second(self):
         clock = Mock(side_effect=[0, .4, 1., 1.499, 1.5])
         control = GestureController(clock)
-        control.update(thumbs_up(), world_points=world_points(thumbs_up()))
-        self.assertFalse(control.update(thumbs_up(), world_points=world_points(thumbs_up())).exit_requested)
+        control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up()))
+        self.assertFalse(control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up())).exit_requested)
         diagonal = thumbs_up()
         diagonal[2], diagonal[3], diagonal[4] = (.3, .6), (.4, .4), (.5, .2)
-        self.assertIsNone(control.update(diagonal, world_points=world_points(diagonal)).exit_progress)
-        self.assertFalse(control.update(thumbs_up(), world_points=world_points(thumbs_up())).exit_requested)
-        self.assertFalse(control.update(thumbs_up(), world_points=world_points(thumbs_up())).exit_requested)
-        self.assertTrue(control.update(thumbs_up(), world_points=world_points(thumbs_up())).exit_requested)
+        self.assertIsNone(control.update(diagonal, waist=POINTER_WAIST, world_points=world_points(diagonal)).exit_progress)
+        self.assertFalse(control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up())).exit_requested)
+        self.assertFalse(control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up())).exit_requested)
+        self.assertTrue(control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up())).exit_requested)
 
 
     def test_hold_uses_elapsed_time_and_never_moves_or_clicks(self):
         clock = Mock(side_effect=[10, 10.25, 10.499, 10.5])
         control = GestureController(clock)
-        states = [control.update(thumbs_up(), world_points=world_points(thumbs_up())) for _ in range(4)]
+        states = [control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up())) for _ in range(4)]
         self.assertEqual(states[0].exit_progress, 0)
         self.assertEqual(states[1].exit_progress, .5)
         self.assertFalse(states[2].exit_requested)
@@ -47,26 +48,26 @@ class ThumbsUpTests(unittest.TestCase):
 
     def test_missing_hand_restarts_countdown(self):
         control = GestureController(Mock(side_effect=[0, .8, 2]))
-        control.update(thumbs_up(), world_points=world_points(thumbs_up()))
-        control.update(thumbs_up(), world_points=world_points(thumbs_up()))
-        control.update([], world_points=world_points([]))
-        self.assertEqual(control.update(thumbs_up(), world_points=world_points(thumbs_up())).exit_progress, 0)
+        control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up()))
+        control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up()))
+        control.update([], waist=POINTER_WAIST, world_points=world_points([]))
+        self.assertEqual(control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up())).exit_progress, 0)
 
     def test_extended_finger_cancels_confirmation(self):
         for tip in (8, 12, 16, 20):
             control = GestureController(Mock(return_value=0.))
-            control.update(thumbs_up(), world_points=world_points(thumbs_up()))
+            control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up()))
             points = thumbs_up()
             points[tip] = (points[tip][0], .2)
             self.assertFalse(is_thumbs_up(points, 1))
-            self.assertIsNone(control.update(points, world_points=world_points(points)).exit_progress)
-            self.assertEqual(control.update(thumbs_up(), world_points=world_points(thumbs_up())).exit_progress, 0)
+            self.assertIsNone(control.update(points, waist=POINTER_WAIST, world_points=world_points(points)).exit_progress)
+            self.assertEqual(control.update(thumbs_up(), waist=POINTER_WAIST, world_points=world_points(thumbs_up())).exit_progress, 0)
 
     def test_open_palm_does_not_exit(self):
         points = thumbs_up()
         for tip in (8, 12, 16, 20):
             points[tip] = (points[tip][0], .2)
-        self.assertIsNone(GestureController().update(points, world_points=world_points(points)).exit_progress)
+        self.assertIsNone(GestureController().update(points, waist=POINTER_WAIST, world_points=world_points(points)).exit_progress)
 
     def test_downward_and_sideways_thumb_do_not_exit(self):
         for points in ([(x, 1-y) for x, y in thumbs_up()],

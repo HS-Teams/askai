@@ -1,6 +1,6 @@
 """Use visible hip landmarks as the body-relative waist boundary."""
 from dataclasses import dataclass
-from math import hypot, isfinite
+from math import atan2, degrees, hypot, isfinite
 
 MIN_CONFIDENCE = .7
 MIN_HIP_WIDTH = .01
@@ -14,6 +14,7 @@ LEFT_HIP, RIGHT_HIP = 23, 24
 class WaistBoundary:
     left: tuple[float, float]
     right: tuple[float, float]
+    arm_angle: float | None
 
     def height_at(self, x):
         fraction = (x - self.left[0]) / (self.right[0] - self.left[0])
@@ -25,7 +26,8 @@ class WaistBoundary:
             and points[i][1] < self.height_at(points[i][0]) for i in (4, 8))
 
     def mirrored(self):
-        return WaistBoundary((1 - self.right[0], self.right[1]), (1 - self.left[0], self.left[1]))
+        return WaistBoundary((1 - self.right[0], self.right[1]), (1 - self.left[0], self.left[1]),
+                             self.arm_angle)
 
 
 def _visible(point):
@@ -55,4 +57,15 @@ def waist_boundary(result, hand_points, aspect):
         if (not _visible(wrist) or hypot((wrist.x - hand_points[0][0]) * aspect,
                                         wrist.y - hand_points[0][1]) > torso * WRIST_MATCH_RATIO):
             return None
-    return WaistBoundary(*hips)
+    angle = _arm_angle(pose[RIGHT_SHOULDER], pose[RIGHT_HIP], hand_points[0], aspect) if hand_points else None
+    return WaistBoundary(*hips, angle)
+
+
+def _arm_angle(shoulder, hip, hand, aspect):
+    arm = ((hand[0] - shoulder.x) * aspect, hand[1] - shoulder.y)
+    torso = ((hip.x - shoulder.x) * aspect, hip.y - shoulder.y)
+    if not all(isfinite(v) for v in (*arm, *torso)) or not hypot(*arm) or not hypot(*torso):
+        return None
+    cross = arm[0] * torso[1] - arm[1] * torso[0]
+    dot = arm[0] * torso[0] + arm[1] * torso[1]
+    return degrees(atan2(abs(cross), dot))

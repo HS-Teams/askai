@@ -51,7 +51,6 @@ if TYPE_CHECKING:
     from .tui.askai_app import BINDINGS
     from .tui.agent_interaction import BINDINGS
     from .language.language import BN_IN
-    from .gestures.scroll import BOTTOM_LIMIT
     from .language.language import BS_BA
     from .tui.app_icons import BUILT_IN_SPEAKER
     from .language.language import C
@@ -188,7 +187,6 @@ if TYPE_CHECKING:
     from .gestures.pointer_response import MAX_FACTOR
     from .gestures.pointer_response import MAX_GAP_SECONDS
     from .gestures.thumbs_up import MAX_HORIZONTAL_RATIO
-    from .gestures.scroll import MAX_STEPS
     from .tui.app_icons import MENU
     from .gestures.command import MESSAGES
     from .language.detection import MINIMUM_LANGUAGE_DISTANCE
@@ -205,8 +203,6 @@ if TYPE_CHECKING:
     from .tui.app_widgets import MenuIcon
     from .exception.exceptions import MissingApiKeyError
     from .language.language import NB_NO
-    from .gestures.scroll import NEUTRAL_BOTTOM
-    from .gestures.scroll import NEUTRAL_TOP
     from .language.language import NL_BE
     from .language.language import NL_NL
     from .language.language import NN_NO
@@ -232,8 +228,6 @@ if TYPE_CHECKING:
     from .language.language import RU_UA
     from .exception.exceptions import RecognitionApiRequestError
     from .language.language import SA_IN
-    from .gestures.controller import SCROLL_COOLDOWN_SECONDS
-    from .gestures.controller import SCROLL_IDLE_SECONDS
     from .gestures.scroll import SCROLL_INTERVAL
     from .tui.app_icons import SEPARATOR_H
     from .tui.app_icons import SEPARATOR_V
@@ -257,7 +251,6 @@ if TYPE_CHECKING:
     from .language.language import TH_TH
     from .gestures.preview import TITLE
     from .tui.app_icons import TOC
-    from .gestures.scroll import TOP_LIMIT
     from .language.language import TR_TR
     from .exception.exceptions import TerminatingQuery
     from .exception.exceptions import TokenLengthExceeded
@@ -315,7 +308,6 @@ _EXPORTS = {
     'BINDINGS': ('tui.askai_app', 'BINDINGS'),
     'BINDINGS': ('tui.agent_interaction', 'BINDINGS'),
     'BN_IN': ('language.language', 'BN_IN'),
-    'BOTTOM_LIMIT': ('gestures.scroll', 'BOTTOM_LIMIT'),
     'BS_BA': ('language.language', 'BS_BA'),
     'BUILT_IN_SPEAKER': ('tui.app_icons', 'BUILT_IN_SPEAKER'),
     'C': ('language.language', 'C'),
@@ -452,7 +444,6 @@ _EXPORTS = {
     'MAX_FACTOR': ('gestures.pointer_response', 'MAX_FACTOR'),
     'MAX_GAP_SECONDS': ('gestures.pointer_response', 'MAX_GAP_SECONDS'),
     'MAX_HORIZONTAL_RATIO': ('gestures.thumbs_up', 'MAX_HORIZONTAL_RATIO'),
-    'MAX_STEPS': ('gestures.scroll', 'MAX_STEPS'),
     'MENU': ('tui.app_icons', 'MENU'),
     'MESSAGES': ('gestures.command', 'MESSAGES'),
     'MINIMUM_LANGUAGE_DISTANCE': ('language.detection', 'MINIMUM_LANGUAGE_DISTANCE'),
@@ -469,8 +460,6 @@ _EXPORTS = {
     'MenuIcon': ('tui.app_widgets', 'MenuIcon'),
     'MissingApiKeyError': ('exception.exceptions', 'MissingApiKeyError'),
     'NB_NO': ('language.language', 'NB_NO'),
-    'NEUTRAL_BOTTOM': ('gestures.scroll', 'NEUTRAL_BOTTOM'),
-    'NEUTRAL_TOP': ('gestures.scroll', 'NEUTRAL_TOP'),
     'NL_BE': ('language.language', 'NL_BE'),
     'NL_NL': ('language.language', 'NL_NL'),
     'NN_NO': ('language.language', 'NN_NO'),
@@ -496,8 +485,6 @@ _EXPORTS = {
     'RU_UA': ('language.language', 'RU_UA'),
     'RecognitionApiRequestError': ('exception.exceptions', 'RecognitionApiRequestError'),
     'SA_IN': ('language.language', 'SA_IN'),
-    'SCROLL_COOLDOWN_SECONDS': ('gestures.controller', 'SCROLL_COOLDOWN_SECONDS'),
-    'SCROLL_IDLE_SECONDS': ('gestures.controller', 'SCROLL_IDLE_SECONDS'),
     'SCROLL_INTERVAL': ('gestures.scroll', 'SCROLL_INTERVAL'),
     'SEPARATOR_H': ('tui.app_icons', 'SEPARATOR_H'),
     'SEPARATOR_V': ('tui.app_icons', 'SEPARATOR_V'),
@@ -521,7 +508,6 @@ _EXPORTS = {
     'TH_TH': ('language.language', 'TH_TH'),
     'TITLE': ('gestures.preview', 'TITLE'),
     'TOC': ('tui.app_icons', 'TOC'),
-    'TOP_LIMIT': ('gestures.scroll', 'TOP_LIMIT'),
     'TR_TR': ('language.language', 'TR_TR'),
     'TerminatingQuery': ('exception.exceptions', 'TerminatingQuery'),
     'TokenLengthExceeded': ('exception.exceptions', 'TokenLengthExceeded'),
@@ -589,7 +575,6 @@ __all__ = [
     'BINDINGS',
     'BINDINGS',
     'BN_IN',
-    'BOTTOM_LIMIT',
     'BS_BA',
     'BUILT_IN_SPEAKER',
     'C',
@@ -726,7 +711,6 @@ __all__ = [
     'MAX_FACTOR',
     'MAX_GAP_SECONDS',
     'MAX_HORIZONTAL_RATIO',
-    'MAX_STEPS',
     'MENU',
     'MESSAGES',
     'MINIMUM_LANGUAGE_DISTANCE',
@@ -743,8 +727,6 @@ __all__ = [
     'MenuIcon',
     'MissingApiKeyError',
     'NB_NO',
-    'NEUTRAL_BOTTOM',
-    'NEUTRAL_TOP',
     'NL_BE',
     'NL_NL',
     'NN_NO',
@@ -770,8 +752,6 @@ __all__ = [
     'RU_UA',
     'RecognitionApiRequestError',
     'SA_IN',
-    'SCROLL_COOLDOWN_SECONDS',
-    'SCROLL_IDLE_SECONDS',
     'SCROLL_INTERVAL',
     'SEPARATOR_H',
     'SEPARATOR_V',
@@ -795,7 +775,6 @@ __all__ = [
     'TH_TH',
     'TITLE',
     'TOC',
-    'TOP_LIMIT',
     'TR_TR',
     'TerminatingQuery',
     'TokenLengthExceeded',

@@ -1,5 +1,6 @@
 """Own one gesture worker; native output goes to a log, events use a private pipe."""
 import atexit
+from contextlib import contextmanager
 import json
 import logging
 import os
@@ -11,6 +12,33 @@ from threading import Event, Lock, Thread
 _lock = Lock()
 _process = None
 STARTUP_TIMEOUT_SECONDS = 120
+
+
+@contextmanager
+def pause_for_ptt():
+    """Suspend gesture commands during voice capture, including dictation."""
+    with _lock:
+        process = _process
+        _send_control(process, 'pause')
+    try:
+        yield
+    finally:
+        with _lock:
+            _send_control(process, 'resume')
+
+
+def _send_control(process, command):
+    if process is not None and process.poll() is None:
+        try:
+            process.stdin.write(command + '\n')
+            process.stdin.flush()
+        except BrokenPipeError:
+            pass  # The worker may have exited since poll().
+
+
+def set_sfx_muted(muted):
+    with _lock:
+        _send_control(_process, 'mute_sfx' if muted else 'unmute_sfx')
 
 
 def stop():
@@ -25,7 +53,7 @@ def stop():
             process.wait()
 
 
-def launch(camera_index, storage, labels, notify, *, wait_ready=False, on_progress=lambda stage: None):
+def launch(camera_index, storage, labels, notify, *, wait_ready=False, on_progress=lambda stage: None, sfx_muted=False):
     global _process
     with _lock:
         if _process is not None and _process.poll() is None:
@@ -37,7 +65,8 @@ def launch(camera_index, storage, labels, notify, *, wait_ready=False, on_progre
             with log_path.open('ab') as output:
                 _process = subprocess.Popen(
                     [sys.executable, '-m', 'askai.gestures.worker', str(camera_index), str(write_fd),
-                     json.dumps(labels)], stdout=output, stderr=output, stdin=subprocess.DEVNULL,
+                     json.dumps(labels), str(int(sfx_muted))], stdout=output, stderr=output, stdin=subprocess.PIPE,
+                    text=True, bufsize=1,
                     pass_fds=(write_fd,), start_new_session=True)
         except BaseException:
             os.close(read_fd)

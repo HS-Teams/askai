@@ -14,7 +14,7 @@ class WaistTests(unittest.TestCase):
     def test_boundary_follows_hips_including_body_movement(self):
         result = body()
         waist = waist_boundary(result, [], 1.)
-        self.assertEqual(waist, WaistBoundary((.4, .65), (.6, .75)))
+        self.assertEqual(waist, WaistBoundary((.4, .65), (.6, .75), None))
         for point in result.pose_landmarks[0]:
             point.y -= .1
         moved = waist_boundary(result, [], 1.)
@@ -56,3 +56,39 @@ class WaistTests(unittest.TestCase):
             self.assertEqual(waist.mirrored().allows([(1-x, y)] * 21), accepted)
         self.assertFalse(waist.allows([]))
         self.assertFalse(waist.allows([(float('nan'), .3)] * 21))
+
+    def test_arm_angle_uses_shoulder_hand_and_torso_with_aspect_correction(self):
+        from math import cos, radians, sin
+        for aspect in (1., 4 / 3, 16 / 9):
+            for angle in (0., 30., 60., 90., 120., 150., 180.):
+                with self.subTest(aspect=aspect, angle=angle):
+                    result = body()
+                    pose = result.pose_landmarks[0]
+                    pose[24].x, pose[24].y = .65, .75
+                    pose[16].x = .65 + .1 * sin(radians(angle)) / aspect
+                    pose[16].y = .2 + .1 * cos(radians(angle))
+                    points = [(pose[16].x, pose[16].y)] * 21
+                    waist = waist_boundary(result, points, aspect)
+                    self.assertAlmostEqual(waist.arm_angle, angle)
+                    self.assertAlmostEqual(waist.mirrored().arm_angle, angle)
+
+    def test_tilting_body_preserves_relative_arm_angle(self):
+        from math import cos, radians, sin
+        result = body()
+        pose = result.pose_landmarks[0]
+        pose[24].x = pose[12].x
+        pose[16].x, pose[16].y = .75, .2
+        for point in pose:
+            x, y = point.x - .5, point.y - .5
+            turn = radians(15)
+            point.x = .5 + x * cos(turn) - y * sin(turn)
+            point.y = .5 + x * sin(turn) + y * cos(turn)
+        waist = waist_boundary(result, [(pose[16].x, pose[16].y)] * 21, 1.)
+        self.assertAlmostEqual(waist.arm_angle, 90.)
+
+    def test_missing_hand_or_collapsed_arm_has_no_angle(self):
+        self.assertIsNone(waist_boundary(body(), [], 1.).arm_angle)
+        result = body()
+        pose = result.pose_landmarks[0]
+        pose[16].x, pose[16].y = pose[12].x, pose[12].y
+        self.assertIsNone(waist_boundary(result, [(pose[16].x, pose[16].y)] * 21, 1.).arm_angle)

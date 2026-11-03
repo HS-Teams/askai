@@ -1,3 +1,4 @@
+from landmark_fixtures import POINTER_WAIST
 from landmark_fixtures import WAIST
 """Wrist rotation must not turn projected fingertip overlap into a mouse press."""
 from math import cos, dist, radians, sin
@@ -41,7 +42,7 @@ class PinchDepthTests(unittest.TestCase):
                             projected = [(x * aspect, y) for x, y in image]
                             self.assertLess(dist(projected[4], projected[8]) / dist(projected[5], projected[17]),
                                             control.CLOSE_RATIO)
-                        state = control.update(image, aspect, world_points=world)
+                        state = control.update(image, aspect, waist=POINTER_WAIST, world_points=world)
                         self.assertFalse(state.dragging)
                         self.assertFalse(state.pinched)
 
@@ -51,26 +52,28 @@ class PinchDepthTests(unittest.TestCase):
                 with self.subTest(tilt=tilt, roll=roll):
                     control = GestureController(Mock(return_value=0.))
                     image, world = observe(pointing_hand(), tilt, roll)
-                    control.update(image, world_points=world)
+                    control.update(image, waist=POINTER_WAIST, world_points=world)
                     image, world = observe(pointing_hand(True), tilt, roll)
-                    self.assertTrue(control.update(image, world_points=world).dragging)
+                    self.assertTrue(control.update(image, waist=POINTER_WAIST, world_points=world).dragging)
                     image, world = observe(pointing_hand(True), tilt + 5, roll + 15, offset=(.04, .03))
-                    self.assertTrue(control.update(image, world_points=world).dragging)
+                    self.assertTrue(control.update(image, waist=POINTER_WAIST, world_points=world).dragging)
                     image, world = observe(pointing_hand(), tilt, roll)
-                    self.assertFalse(control.update(image, world_points=world).dragging)
+                    self.assertFalse(control.update(image, waist=POINTER_WAIST, world_points=world).dragging)
 
     def test_missing_or_invalid_depth_releases_and_requires_open_hand_again(self):
         for invalid in ([], [(0., 0., 0.)] * 21, [(float('nan'), 0., 0.)] * 21, [(0., 0.)] * 21):
             with self.subTest(invalid=invalid):
-                control = GestureController(Mock(return_value=0.))
+                clock = Mock(return_value=0.)
+                control = GestureController(clock)
                 opened, open_world = observe(pointing_hand())
                 closed, closed_world = observe(pointing_hand(True))
-                control.update(opened, world_points=open_world)
-                self.assertTrue(control.update(closed, world_points=closed_world).dragging)
-                self.assertFalse(control.update(closed, world_points=invalid).dragging)
-                self.assertFalse(control.update(closed, world_points=closed_world).dragging)
-                control.update(opened, world_points=open_world)
-                self.assertTrue(control.update(closed, world_points=closed_world).dragging)
+                control.update(opened, waist=POINTER_WAIST, world_points=open_world)
+                self.assertTrue(control.update(closed, waist=POINTER_WAIST, world_points=closed_world).dragging)
+                self.assertFalse(control.update(closed, waist=POINTER_WAIST, world_points=invalid).dragging)
+                self.assertFalse(control.update(closed, waist=POINTER_WAIST, world_points=closed_world).dragging)
+                clock.return_value = 1.
+                control.update(opened, waist=POINTER_WAIST, world_points=open_world)
+                self.assertTrue(control.update(closed, waist=POINTER_WAIST, world_points=closed_world).dragging)
 
     def test_session_moves_while_pointing_and_only_presses_for_actual_pinch(self):
         camera, tracker, pointer, view, policy, notify = [Mock() for _ in range(6)]

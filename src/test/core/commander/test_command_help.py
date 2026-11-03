@@ -4,10 +4,11 @@ from pathlib import Path
 from string import Template
 from textwrap import dedent
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 import click
 from click.testing import CliRunner
 from askai.cli.help_formatter import HelpGroup
+from askai.cli.gestures_help import GesturesCommand
 
 
 class CommandHelpTests(unittest.TestCase):
@@ -38,7 +39,7 @@ class CommandHelpTests(unittest.TestCase):
                 isinstance(target, ast.Name) and target.id == 'COMMANDER_HELP_TPL' for target in node.targets
             ):
                 nodes.append(node)
-        self.scope = dict(click=click, Template=Template, dedent=dedent, HelpGroup=HelpGroup,
+        self.scope = dict(click=click, Template=Template, dedent=dedent, HelpGroup=HelpGroup, GesturesCommand=GesturesCommand,
                           _init_context=Mock(), display_text=Mock())
         module = ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[]))
         exec(compile(module, str(source), 'exec'), self.scope)
@@ -92,6 +93,42 @@ class CommandHelpTests(unittest.TestCase):
         handler.dictate.assert_called_once_with('notes.txt')
         help_result = CliRunner().invoke(self.group, ['dictate', '--help'])
         self.assertIn('3 seconds', help_result.output)
+        self.assertIn('copied to the clipboard', ' '.join(help_result.output.split()))
+
+    def test_paste_waits_for_focus_change_and_supports_immediate_paste(self):
+        self.scope['text_formatter'] = Mock()
+        for arguments, seconds in ((['paste'], 3), (['paste', '--delay', '0'], 0)):
+            with self.subTest(arguments=arguments), patch('pyperclip.paste', return_value='refined text'), patch(
+                    'time.sleep') as sleep, patch('askai.core.support.clipboard.paste_into_focused_app') as paste:
+                order = Mock()
+                order.attach_mock(sleep, 'sleep')
+                order.attach_mock(paste, 'paste')
+                result = CliRunner().invoke(self.group, arguments)
+                self.assertEqual(result.exit_code, 0, result.output)
+                self.assertEqual(order.mock_calls, [call.sleep(seconds), call.paste()])
+        help_result = CliRunner().invoke(self.group, ['paste', '--help'])
+        self.assertIn('--delay', help_result.output)
+        self.assertIn('without pressing Enter', ' '.join(help_result.output.split()))
+
+    def test_empty_clipboard_and_invalid_delay_do_not_paste(self):
+        self.scope['text_formatter'] = Mock()
+        with patch('pyperclip.paste', return_value=''), patch('time.sleep') as sleep, patch(
+                'askai.core.support.clipboard.paste_into_focused_app') as paste:
+            result = CliRunner().invoke(self.group, ['paste'])
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.scope['text_formatter'].commander_print.assert_called_once_with('The clipboard is empty.')
+            for delay in ('-1', 'not-a-number'):
+                self.assertNotEqual(CliRunner().invoke(self.group, ['paste', '--delay', delay]).exit_code, 0)
+            sleep.assert_not_called()
+            paste.assert_not_called()
+
+    def test_paste_reports_native_permission_failure(self):
+        self.scope['text_formatter'] = Mock()
+        with patch('pyperclip.paste', return_value='text'), patch('time.sleep'), patch(
+                'askai.core.support.clipboard.paste_into_focused_app', side_effect=RuntimeError('Enable Accessibility')):
+            result = CliRunner().invoke(self.group, ['paste', '--delay', '0'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('Enable Accessibility', result.output)
 
     def test_dictation_expected_failures_are_command_errors(self):
         import json
@@ -132,3 +169,45 @@ class CommandHelpTests(unittest.TestCase):
                     self.assertIn('--help', result.output)
             finally:
                 command.callback = original
+
+    def test_gestures_start_default_explicit_stop_and_completion(self):
+        with patch('askai.gestures.command.start', return_value={'status': 'started'}) as start, patch(
+                'askai.gestures.background.stop') as stop:
+            result = CliRunner().invoke(self.group, ['gestures'], standalone_mode=False)
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(result.return_value, {'status': 'started'})
+            start.assert_called_once_with(0)
+            result = CliRunner().invoke(self.group, ['gestures', 'start', '--camera-index', '2'], standalone_mode=False)
+            self.assertEqual(result.exit_code, 0, result.output)
+            start.assert_called_with(2)
+            start.reset_mock()
+            result = CliRunner().invoke(self.group, ['gestures', 'stop'], standalone_mode=False)
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(result.return_value, {'status': 'stopped'})
+            start.assert_not_called()
+            stop.assert_called_once_with()
+            self.assertNotEqual(CliRunner().invoke(self.group, ['gestures', 'invalid']).exit_code, 0)
+        suggestions = self.scope['command_suggestions']()
+        self.assertIn('/gestures start', suggestions)
+        self.assertIn('/gestures stop', suggestions)
+
+    def test_both_gestures_help_routes_show_current_tables_without_starting_camera(self):
+        with patch('askai.gestures.command.start') as start, patch('askai.gestures.background.stop') as stop:
+            direct = CliRunner().invoke(self.group, ['gestures', '--help'], terminal_width=160)
+            self.assertEqual(direct.exit_code, 0, direct.output)
+            self.scope['text_formatter'] = Mock()
+            self.scope['render_help'] = Mock()
+            named = CliRunner().invoke(self.group, ['help', 'gestures'])
+            self.assertEqual(named.exit_code, 0, named.output)
+            routed_text = self.scope['render_help'].call_args.args[1]
+            for text in (direct.output, routed_text):
+                flat = ' '.join(click.unstyle(text).split())
+                for expected in ('Gestos, ativação e cooldowns', 'Indicador', 'pinça', 'Mão espalmada',
+                                 'Heavy Metal', 'Telefone', 'Joinha', 'Dois dedos', 'Quadril',
+                                 '2,5 s', '0,5 s', '1 s', '45 s', '60 s', 'start', 'stop',
+                                 'Para cima', 'Para baixo', '1 a 8 passos a cada 0,1 s'):
+                    self.assertIn(expected, flat)
+                self.assertIn('O detector de gestos irá ser desativado em 15 segundos', flat)
+                self.assertNotIn('3 s contínuos', flat)
+            start.assert_not_called()
+            stop.assert_not_called()

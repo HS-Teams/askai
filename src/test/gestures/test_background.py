@@ -13,17 +13,25 @@ import numpy as np
 
 
 class BackgroundTests(unittest.TestCase):
+    def test_mute_command_reaches_running_worker(self):
+        process = Mock(poll=Mock(return_value=None))
+        with patch.object(background, '_process', process):
+            background.set_sfx_muted(True)
+            background.set_sfx_muted(False)
+        self.assertEqual([call.args[0] for call in process.stdin.write.call_args_list], ['mute_sfx\n', 'unmute_sfx\n'])
+
     def test_worker_logs_to_file_and_keeps_events_separate(self):
         process = Mock(pid=123)
         with TemporaryDirectory() as storage, patch.object(background, '_process', None), patch.object(
                 background.subprocess, 'Popen', return_value=process) as popen, patch.object(background, 'Thread') as thread:
-            result = background.launch(1, storage, {}, Mock())
+            result = background.launch(1, storage, {}, Mock(), sfx_muted=True)
             self.assertEqual(result['status'], 'starting')
             self.assertTrue(Path(result['log']).is_file())
             kwargs = popen.call_args.kwargs
             self.assertIs(kwargs['stdout'], kwargs['stderr'])
             self.assertTrue(kwargs['start_new_session'])
             self.assertEqual(len(kwargs['pass_fds']), 1)
+            self.assertEqual(popen.call_args.args[0][-1], '1')
             # No reader was started by the mocked Thread.
             os.close(thread.call_args.kwargs['args'][0])
 
@@ -59,9 +67,9 @@ class RecognitionEventsTests(unittest.TestCase):
         with patch('askai.gestures.session.GestureController') as controller:
             controller.return_value.update.side_effect = [
                 GestureState(dragging=True), GestureState(dragging=True),
-                GestureState(), GestureState(), GestureState(escape_requested=True), GestureState()]
+                GestureState(), GestureState(), GestureState(abort_requested=True), GestureState()]
             run_session(camera, tracker, pointer, view, policy, notify=notify)
-        self.assertEqual([call.args[0] for call in notify.call_args_list], ['pinch', 'release', 'escape'])
+        self.assertEqual([call.args[0] for call in notify.call_args_list], ['pinch', 'release', 'abort'])
 
     def test_parent_shutdown_releases_resources(self):
         camera, tracker, pointer, view, policy = [Mock() for _ in range(5)]

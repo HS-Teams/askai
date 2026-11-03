@@ -1,5 +1,5 @@
-"""Two-finger scroll recognition and displacement-based wheel steps."""
-from math import hypot
+"""Rotation-invariant 3D two-finger recognition and height-based wheel steps."""
+from math import dist
 from time import monotonic
 
 TOP_LIMIT = .25
@@ -8,15 +8,27 @@ NEUTRAL_TOP = .45
 NEUTRAL_BOTTOM = .55
 SCROLL_INTERVAL = .1
 MAX_STEPS = 8
+EXTENDED_JOINT_COSINE = .5  # At most 60 degrees of bend at each finger joint.
 
 
-def is_scroll_hand(points, aspect):
-    points = [(x * aspect, y) for x, y in points]
-    wrist = points[0]
-    def radius(index):
-        return hypot(points[index][0] - wrist[0], points[index][1] - wrist[1])
-    return (all(radius(tip) > radius(joint) * 1.15 for joint, tip in ((6, 8), (10, 12)))
-            and all(radius(tip) < radius(joint) * .95 for joint, tip in ((3, 4), (14, 16), (18, 20))))
+def is_scroll_hand(world_points):
+    alignments = [_finger_alignment(world_points, base) for base in (5, 9, 13, 17)]
+    if any(value is None for value in alignments):
+        return False
+    return (all(value >= EXTENDED_JOINT_COSINE for value in alignments[:2])
+            and all(value < EXTENDED_JOINT_COSINE for value in alignments[2:]))
+
+
+def _finger_alignment(points, base):
+    alignments = []
+    for joint in (base + 1, base + 2):
+        before, pivot, after = points[joint - 1:joint + 2]
+        length = dist(before, pivot) * dist(pivot, after)
+        if length == 0:
+            return None
+        dot = sum((b - a) * (c - b) for a, b, c in zip(before, pivot, after))
+        alignments.append(dot / length)
+    return min(alignments)
 
 
 class ScrollMotion:

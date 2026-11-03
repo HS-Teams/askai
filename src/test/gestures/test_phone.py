@@ -1,3 +1,4 @@
+from landmark_fixtures import POINTER_WAIST
 from landmark_fixtures import world_points
 import unittest
 from unittest.mock import Mock
@@ -18,18 +19,18 @@ class PhoneTests(unittest.TestCase):
         clock = Mock(return_value=0.)
         control = GestureController(clock)
         self.assertTrue(is_phone_hand(phone(), 1))
-        self.assertFalse(control.update(phone(), world_points=world_points(phone())).voice_requested)
+        self.assertFalse(control.update(phone(), waist=POINTER_WAIST, world_points=world_points(phone())).voice_requested)
         clock.return_value = .499
-        self.assertFalse(control.update(phone(), world_points=world_points(phone())).voice_requested)
+        self.assertFalse(control.update(phone(), waist=POINTER_WAIST, world_points=world_points(phone())).voice_requested)
         clock.return_value = .5
-        state = control.update(phone(), world_points=world_points(phone()))
+        state = control.update(phone(), waist=POINTER_WAIST, world_points=world_points(phone()))
         self.assertTrue(state.voice_requested)
         self.assertIsNone(state.pointer)
         self.assertFalse(state.dragging)
         clock.return_value = 2.
-        self.assertFalse(control.update(phone(), world_points=world_points(phone())).voice_requested)
-        control.update([], world_points=world_points([]))
-        self.assertEqual(control.update(phone(), world_points=world_points(phone())).voice_progress, 0)
+        self.assertFalse(control.update(phone(), waist=POINTER_WAIST, world_points=world_points(phone())).voice_requested)
+        control.update([], waist=POINTER_WAIST, world_points=world_points([]))
+        self.assertEqual(control.update(phone(), waist=POINTER_WAIST, world_points=world_points(phone())).voice_progress, 0)
 
     def test_extended_middle_finger_is_not_phone(self):
         points = phone()

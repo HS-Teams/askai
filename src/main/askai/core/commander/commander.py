@@ -19,6 +19,7 @@ from textwrap import dedent
 import os
 
 from askai.cli.help_formatter import HelpGroup, render_help
+from askai.cli.gestures_help import GesturesCommand
 from click import Command
 from clitt.core.term.cursor import cursor
 from hspylib.core.config.path_object import PathObject
@@ -249,6 +250,13 @@ def speak() -> None:
 
 
 @ask_commander.command()
+def mute() -> None:
+    """Toggle sound-effect muting and remember the preference. Speech uses /speak."""
+    SettingsCmd.set("askai.sfx.muted", not configs.is_sfx_muted, announce=False)
+    text_formatter.commander_print(f"`SFX mute` is {color_bool(configs.is_sfx_muted)}")
+
+
+@ask_commander.command()
 @click.argument("operation", default="list")
 @click.argument("name", default="ALL")
 def context(operation: str, name: str | None = None) -> None:
@@ -302,6 +310,31 @@ def copy(name: str) -> None:
     :param name: The name of the context entry to copy.
     """
     HistoryCmd.context_copy(name)
+
+
+@ask_commander.command()
+@click.option('--delay', type=click.FloatRange(min=0), default=3.0, show_default=True,
+              help='Seconds to switch focus before pasting.')
+def paste(delay: float) -> None:
+    """Paste at the caret in the focused macOS app using Cmd+V, without pressing Enter.
+
+    Switch to the destination app during the delay. The app focused when the delay
+    ends receives the paste. Use --delay 0 to paste immediately.
+    """
+    from time import sleep
+    import pyperclip
+    from askai.core.support.clipboard import paste_into_focused_app
+
+    try:
+        if not pyperclip.paste():
+            text_formatter.commander_print('The clipboard is empty.')
+            return
+        text_formatter.commander_print(f'Pasting in {delay:g} seconds. Focus the destination app.')
+        text_formatter.console.file.flush()
+        sleep(delay)
+        paste_into_focused_app()
+    except (OSError, RuntimeError) as error:
+        raise click.ClickException(str(error)) from error
 
 
 @ask_commander.command()
@@ -450,12 +483,17 @@ def playback() -> None:
         raise click.ClickException(str(error)) from error
 
 
-@ask_commander.command()
+@ask_commander.command(cls=GesturesCommand)
+@click.argument('operation', type=click.Choice(['start', 'stop']), default='start')
 @click.option('--camera-index', type=click.IntRange(min=0), default=0, show_default=True)
-def gestures(camera_index: int) -> dict:
+def gestures(operation: str, camera_index: int) -> dict:
     """Preview hand gestures, move the mouse and pinch to click. Esc stops; no video is recorded."""
     from askai.gestures.command import start
     try:
+        if operation == 'stop':
+            from askai.gestures.background import stop
+            stop()
+            return {'status': 'stopped'}
         return start(camera_index)
     except Exception as error:
         raise click.ClickException(str(error)) from error
@@ -510,6 +548,7 @@ def dictate(dest_file: str) -> None:
 
     Press Esc or pause for more than 3 seconds to finish and save. Existing files are never overwritten. Without --dest-file,
     both versions are saved in the AskAI data directory under dictations/.
+    The refined text is also copied to the clipboard.
     """
     from sqlite3 import Error as DatabaseError
     from askai.exception.exceptions import InvalidInputDevice, InvalidRecognitionApiError

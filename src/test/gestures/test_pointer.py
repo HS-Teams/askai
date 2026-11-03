@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace as NS
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 import numpy as np
 from askai.gestures.controller import GestureState
 from askai.gestures.preview import Pointer, Preview
@@ -12,16 +12,40 @@ class PointerTests(unittest.TestCase):
         sound.start()
         self.addCleanup(sound.stop)
 
-    def test_scroll_edges_send_mac_document_navigation(self):
+    def test_scroll_uses_native_wheel_without_repositioning_pointer(self):
         pointer = Pointer.__new__(Pointer)
-        pointer._send_key = Mock()
+        pointer._mouse = Mock()
+        pointer._position = (-1500, 300)
         quartz = Mock()
         with patch.dict('sys.modules', Quartz=quartz):
+            pointer.scroll(1)
+            pointer.scroll(-1)
+        self.assertEqual(quartz.CGEventCreateScrollWheelEvent.call_args_list,
+                         [call(None, quartz.kCGScrollEventUnitLine, 1, 1),
+                          call(None, quartz.kCGScrollEventUnitLine, 1, -1)])
+        self.assertEqual(quartz.CGEventPost.call_count, 2)
+        quartz.CGEventCreateMouseEvent.assert_not_called()
+        self.assertEqual(pointer._position, (-1500, 300))
+        self.assertEqual(pointer._mouse.mock_calls, [])
+
+    def test_scroll_boundaries_target_focused_application_without_moving_pointer(self):
+        pointer = Pointer.__new__(Pointer)
+        pointer._position = (-1500, 300)
+        quartz, appkit = Mock(), Mock()
+        appkit.NSWorkspace.sharedWorkspace.return_value.frontmostApplication.return_value.processIdentifier.return_value = 42
+        with patch.dict('sys.modules', Quartz=quartz, AppKit=appkit):
             pointer.scroll_boundary('top')
             pointer.scroll_boundary('bottom')
-        self.assertEqual([call.args for call in pointer._send_key.call_args_list],
-                         [(126, quartz.kCGEventFlagMaskCommand), (125, quartz.kCGEventFlagMaskCommand)])
-
+        self.assertEqual(quartz.CGEventCreateKeyboardEvent.call_args_list,
+                         [call(None, 126, True), call(None, 126, False),
+                          call(None, 125, True), call(None, 125, False)])
+        self.assertEqual(quartz.CGEventSetFlags.call_args_list,
+                         [call(quartz.CGEventCreateKeyboardEvent.return_value,
+                               quartz.kCGEventFlagMaskCommand)] * 4)
+        self.assertEqual(quartz.CGEventPostToPid.call_args_list,
+                         [call(42, quartz.CGEventCreateKeyboardEvent.return_value)] * 4)
+        quartz.CGEventCreateMouseEvent.assert_not_called()
+        self.assertEqual(pointer._position, (-1500, 300))
 
     def test_drag_events_and_release_are_idempotent(self):
         pointer = Pointer.__new__(Pointer)

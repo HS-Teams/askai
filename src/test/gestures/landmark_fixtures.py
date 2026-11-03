@@ -1,7 +1,8 @@
 """Pair planar gesture fixtures with world landmarks and a visible body."""
 from askai.gestures.waist import WaistBoundary
 
-WAIST = WaistBoundary((.3, .98), (.7, .98))
+WAIST = WaistBoundary((.3, .98), (.7, .98), 90.)
+POINTER_WAIST = WaistBoundary((0., 1.), (1., 1.), None)
 
 
 def world_points(points, aspect=1.0):
