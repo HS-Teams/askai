@@ -152,6 +152,7 @@ class TtsSttCmd(ABC):
     @staticmethod
     def dictate(dest_file: str | None) -> None:
         from uuid import uuid4
+        import pyperclip
 
         from askai.core.askai_messages import msg
         from askai.core.askai_prompt import prompt
@@ -159,6 +160,7 @@ class TtsSttCmd(ABC):
         from askai.cli.dictation_input import finish_requested
         from askai.core.support.app_paths import askai_data_dir
         from askai.core.support.inference import complete
+        from askai.gestures.background import pause_for_ptt
 
         if dest_file:
             destination = Path(dest_file).expanduser().absolute()
@@ -174,16 +176,16 @@ class TtsSttCmd(ABC):
             text_formatter.console.file.flush()
 
         from askai.core.component.multimedia.audio_player import player
-        sounds = Path(__file__).resolve().parents[3] / "resources/sfx"
-        player.play_audio_file(sounds / "dictate-start.mp3")
-        _, original = recorder.listen(
-            raise_on_timeout=False, raise_on_intelligible=False,
-            counter_msg=msg.dictating(),
-            end_silence=dictation.END_SILENCE_SECONDS, phrase_limit=0,
-            finish_requested=finish_requested,
-            wait_for_speech=True, on_ready=ready,
-            on_captured=lambda: player.play_audio_file(sounds / "dictate-end.mp3"),
-        )
+        with pause_for_ptt():
+            player.play_sfx('ui/dictate-start')
+            _, original = recorder.listen(
+                raise_on_timeout=False, raise_on_intelligible=False,
+                counter_msg=msg.dictating(),
+                end_silence=dictation.END_SILENCE_SECONDS, phrase_limit=0,
+                finish_requested=finish_requested,
+                wait_for_speech=True, on_ready=ready,
+                on_captured=lambda: player.play_sfx('ui/dictate-end'),
+            )
         if not original:
             text_formatter.commander_print(msg.t("Dictation produced no text!"))
             return
@@ -191,13 +193,14 @@ class TtsSttCmd(ABC):
         text_formatter.commander_print(msg.t("Original dictation saved:") + f" `{source}`")
         refined = dictation.refine(original, prompt.read_prompt("dictation-refiner.txt"), complete)
         dictation.save_refined(destination, refined)
+        pyperclip.copy(refined)
         from askai.core.speech.dictation_memory import register
         from askai.core.support.persistent_memory import PersistentMemory
 
         durable = (PersistentMemory(askai_data_dir() / "memory" / "history.sqlite3")
                    if configs.is_keep_context else None)
         register(shared.memory, durable, configs.agent, Path.cwd(), source, destination, refined)
-        text_formatter.commander_print(msg.t("Refined dictation saved:") + f" `{destination}`")
+        text_formatter.commander_print(msg.t("Refined dictation saved and copied to the clipboard:") + f" `{destination}`")
         from askai.core.askai_events import events
         from askai.core.model.ai_reply import AIReply
         events.reply.emit(reply=AIReply.final(f"<TTS>{refined}</TTS>"))

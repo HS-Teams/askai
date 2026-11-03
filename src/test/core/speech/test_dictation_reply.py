@@ -3,11 +3,54 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace as NS
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 from askai.core.speech.narration import parse_narration
 
 
 class DictationReplyTests(unittest.TestCase):
+    def test_empty_or_failed_dictation_does_not_replace_clipboard(self):
+        path = Path(__file__).resolve().parents[3] / 'main/askai/core/commander/commands/tts_stt_cmd.py'
+        node = next(n for n in ast.walk(ast.parse(path.read_text()))
+                    if isinstance(n, ast.FunctionDef) and n.name == 'dictate')
+        node.decorator_list = []
+        recorder, clipboard, complete = Mock(), Mock(), Mock(side_effect=ValueError('Refinement failed'))
+        scope = dict(__file__=str(path), Path=Path, recorder=recorder, text_formatter=Mock())
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), scope)
+        modules = {
+            'pyperclip': clipboard,
+            'askai.core.component.multimedia.audio_player': NS(player=Mock()),
+            'askai.core.askai_messages': NS(msg=NS(t=lambda text: text, dictating=lambda: 'Dictating')),
+            'askai.core.askai_prompt': NS(prompt=Mock()),
+            'askai.core.support.inference': NS(complete=complete),
+            'askai.core.support.app_paths': NS(askai_data_dir=Mock()),
+            'askai.cli.dictation_input': NS(finish_requested=Mock()),
+        }
+        for original in ('', 'Original transcription', RuntimeError('Capture failed')):
+            process = Mock(poll=Mock(return_value=None))
+            with self.subTest(original=original), TemporaryDirectory() as directory, patch.dict(
+                    'sys.modules', modules), patch('askai.gestures.background._process', process):
+                destination = Path(directory) / 'dictation.txt'
+
+                def capture(**kwargs):
+                    process.stdin.write.assert_called_once_with('pause\n')
+                    if isinstance(original, Exception):
+                        raise original
+                    return None, original
+
+                recorder.listen.side_effect = capture
+                if isinstance(original, Exception):
+                    with self.assertRaisesRegex(RuntimeError, 'Capture failed'):
+                        scope['dictate'](str(destination))
+                elif original:
+                    with self.assertRaisesRegex(ValueError, 'Refinement failed'):
+                        scope['dictate'](str(destination))
+                    self.assertEqual(destination.with_suffix('.txt.orig').read_text(), original)
+                else:
+                    scope['dictate'](str(destination))
+                self.assertFalse(destination.exists())
+                clipboard.copy.assert_not_called()
+                self.assertEqual(process.stdin.write.call_args_list, [call('pause\n'), call('resume\n')])
+
     def test_saved_notices_precede_speakable_final_answer(self):
         path = Path(__file__).resolve().parents[3] / 'main/askai/core/commander/commands/tts_stt_cmd.py'
         tree = ast.parse(path.read_text())
@@ -20,12 +63,22 @@ class DictationReplyTests(unittest.TestCase):
         events.reply.emit.side_effect = lambda **kwargs: order.append(('reply', kwargs['reply']))
         refined = 'Joãozinho gostava de futebol.'
         recorder = Mock()
-        recorder.listen.return_value = (None, 'original')
+        process = Mock(poll=Mock(return_value=None))
+
+        def capture(**kwargs):
+            process.stdin.write.assert_called_once_with('pause\n')
+            process.stdin.flush.assert_called_once()
+            return None, 'original'
+
+        recorder.listen.side_effect = capture
         player = Mock()
+        clipboard = Mock()
+        clipboard.copy.side_effect = lambda text: order.append(('clipboard', text))
         scope = dict(__file__=str(path), Path=Path, recorder=recorder, text_formatter=formatter,
                      configs=NS(is_keep_context=False, agent='codex'), shared=Mock())
         exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), scope)
         modules = {
+            'pyperclip': clipboard,
             'askai.core.component.multimedia.audio_player': NS(player=player),
             'askai.core.askai_messages': NS(msg=NS(t=lambda text: text, dictating=lambda: 'Dictating')),
             'askai.core.askai_prompt': NS(prompt=Mock()),
@@ -36,18 +89,18 @@ class DictationReplyTests(unittest.TestCase):
             'askai.core.support.app_paths': NS(askai_data_dir=Mock()),
             'askai.cli.dictation_input': NS(finish_requested=Mock()),
         }
-        with TemporaryDirectory() as directory, patch.dict('sys.modules', modules):
+        with TemporaryDirectory() as directory, patch.dict('sys.modules', modules), patch(
+                'askai.gestures.background._process', process):
             destination = Path(directory) / 'dictation.txt'
             scope['dictate'](str(destination))
             self.assertEqual(destination.read_text(), refined)
-            sound = player.play_audio_file.call_args.args[0]
-            self.assertEqual(sound.name, 'dictate-start.mp3')
-            self.assertTrue(sound.is_file())
+            clipboard.copy.assert_called_once_with(refined)
+            self.assertEqual(process.stdin.write.call_args_list, [call('pause\n'), call('resume\n')])
+            player.play_sfx.assert_called_once_with('ui/dictate-start')
             recorder.listen.call_args.kwargs["on_captured"]()
-            end_sound = player.play_audio_file.call_args.args[0]
-            self.assertEqual(end_sound.name, "dictate-end.mp3")
-            self.assertTrue(end_sound.is_file())
-        self.assertEqual([kind for kind, _ in order], ['notice', 'notice', 'reply'])
+            self.assertEqual(player.play_sfx.call_args_list,
+                             [call('ui/dictate-start'), call('ui/dictate-end')])
+        self.assertEqual([kind for kind, _ in order], ['notice', 'clipboard', 'notice', 'reply'])
         reply = order[-1][1]
         self.assertTrue(reply.is_final)
         self.assertTrue(reply.is_speakable)
