@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from askai.core.agents.contracts import AgentResult
 from askai.core.engine.agent.agent_engine import AgentEngine
 from askai.core.component.answer_validator import validate_response
@@ -18,6 +18,7 @@ class SessionReviewTests(unittest.TestCase):
                 AgentResult('s', 'refiner-turn', json.dumps(dict(final_answer='<TTS>Encontrei cinco pastas.</TTS>')), 'completed'),
             ]
             engine = AgentEngine('codex')
+            engine.configs = Mock(return_value=Mock(is_keep_context=True))
             with engine.use_session('s'):
                 validate_response(engine, (PROMPTS / 'taius-session-validator.txt').read_text())
                 answer = refine_response(engine, (PROMPTS / 'taius-session-refiner.txt').read_text(), user='Hjunior', locale='pt_BR')
