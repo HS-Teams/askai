@@ -6,6 +6,14 @@ from askai.gestures import sfx
 
 
 class SoundTests(unittest.TestCase):
+    def test_escape_sound_follows_key_delivery(self):
+        pointer = Pointer.__new__(Pointer)
+        pointer._send_key = Mock()
+        with patch.object(sfx, 'play_escape') as sound:
+            pointer.escape()
+        pointer._send_key.assert_called_once_with(53, 0)
+        sound.assert_called_once_with()
+
     def test_requested_assets_exist_and_are_routed(self):
         for name, filename in (
             ('click', 'gesture-click.ogg'), ('drag', 'gesture-move.mp3'),

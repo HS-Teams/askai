@@ -6,10 +6,11 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 
 _lock = Lock()
 _process = None
+STARTUP_TIMEOUT_SECONDS = 120
 
 
 def stop():
@@ -24,7 +25,7 @@ def stop():
             process.wait()
 
 
-def launch(camera_index, storage, labels, notify):
+def launch(camera_index, storage, labels, notify, *, wait_ready=False, on_progress=lambda stage: None):
     global _process
     with _lock:
         if _process is not None and _process.poll() is None:
@@ -44,7 +45,27 @@ def launch(camera_index, storage, labels, notify):
         finally:
             os.close(write_fd)
         process = _process
-    Thread(target=_read_events, args=(read_fd, process, notify), daemon=True).start()
+    ready = Event()
+    startup = []
+
+    def deliver(kind):
+        if isinstance(kind, dict) and kind.get('type') == 'loading':
+            on_progress(kind['stage'])
+            return
+        if wait_ready and not ready.is_set() and kind in {'started', 'stopped', 'failed'}:
+            startup.append(kind)
+            ready.set()
+        else:
+            notify(kind)
+
+    Thread(target=_read_events, args=(read_fd, process, deliver), daemon=True).start()
+    if wait_ready:
+        if not ready.wait(STARTUP_TIMEOUT_SECONDS):
+            stop()
+            raise RuntimeError(f'Gesture startup timed out. See {log_path}')
+        if startup[0] != 'started':
+            raise RuntimeError(f'Gesture control failed to start. See {log_path}')
+        return {'status': 'started', 'pid': process.pid, 'log': str(log_path)}
     return {'status': 'starting', 'pid': process.pid, 'log': str(log_path)}
 
 

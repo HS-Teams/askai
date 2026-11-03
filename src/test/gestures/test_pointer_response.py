@@ -1,3 +1,4 @@
+from landmark_fixtures import world_points
 import unittest
 from unittest.mock import Mock
 from askai.gestures.pointer_response import PointerResponse
@@ -45,11 +46,11 @@ class PointerResponseTests(unittest.TestCase):
     def test_absolute_target_does_not_overshoot_or_drift_when_hand_is_still(self):
         clock = Mock(return_value=0.)
         controller = GestureController(motion_clock=clock)
-        previous = controller.update(hand()).pointer[0]
+        previous = controller.update(hand(), world_points=world_points(hand())).pointer[0]
         target = (.6 - controller.CAMERA_MARGIN) / (1 - 2 * controller.CAMERA_MARGIN)
         for i in range(1, 101):
             clock.return_value = i * .02
-            current = controller.update(hand(.6)).pointer[0]
+            current = controller.update(hand(.6), world_points=world_points(hand(.6))).pointer[0]
             self.assertGreaterEqual(current, previous)
             self.assertLessEqual(current, target)
             self.assertLess(current - previous, .05)
@@ -57,22 +58,22 @@ class PointerResponseTests(unittest.TestCase):
         settled = previous
         for i in range(101, 121):
             clock.return_value = i * .02
-            self.assertEqual(controller.update(hand(.6)).pointer[0], settled)
+            self.assertEqual(controller.update(hand(.6), world_points=world_points(hand(.6))).pointer[0], settled)
 
     def test_small_hand_jitter_keeps_pointer_still(self):
         clock = Mock(return_value=0.)
         controller = GestureController(motion_clock=clock)
-        initial = controller.update(hand()).pointer
+        initial = controller.update(hand(), world_points=world_points(hand())).pointer
         for i in range(1, 51):
             clock.return_value = i * .02
-            self.assertEqual(controller.update(hand(.5 + (-1)**i * .002)).pointer, initial)
+            self.assertEqual(controller.update(hand(.5 + (-1)**i * .002), world_points=world_points(hand(.5 + (-1)**i * .002))).pointer, initial)
 
     def test_tiny_pointer_adjustment_moves_only_a_fraction_of_normal_step(self):
         clock = Mock(return_value=0.)
         controller = GestureController(motion_clock=clock)
-        initial = controller.update(hand()).pointer[0]
+        initial = controller.update(hand(), world_points=world_points(hand())).pointer[0]
         clock.return_value = .02
-        adjusted = controller.update(hand(.506)).pointer[0]
+        adjusted = controller.update(hand(.506), world_points=world_points(hand(.506))).pointer[0]
         normal_step = .012 * controller.SMOOTHING
         self.assertGreater(adjusted, initial)
         self.assertLess(adjusted - initial, normal_step * .25)
@@ -80,7 +81,7 @@ class PointerResponseTests(unittest.TestCase):
     def test_large_motion_keeps_normal_response(self):
         clock = Mock(return_value=0.)
         controller = GestureController(motion_clock=clock)
-        initial = controller.update(hand()).pointer[0]
+        initial = controller.update(hand(), world_points=world_points(hand())).pointer[0]
         clock.return_value = .02
-        moved = controller.update(hand(.6)).pointer[0]
+        moved = controller.update(hand(.6), world_points=world_points(hand(.6))).pointer[0]
         self.assertGreater(moved - initial, .03)

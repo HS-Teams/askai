@@ -111,7 +111,9 @@ class Pointer:
 class Preview:
     TITLE = 'AskAI Gestures'
     INITIAL_SIZE = (80, 60)
-    LABELS = ('Scroll', 'No hand', 'Drag', 'Pinch', 'Move', 'Esc: stop', 'Hold rock hand to stop', 'Hold open palm to send Esc', 'Hold phone gesture for voice', 'Hold thumbs up to double-click')
+    LABELS = ('Scroll', 'No hand', 'Drag', 'Pinch', 'Move', 'Esc: stop', 'Hold thumbs up to stop',
+              'Hold heavy metal for 1s to send Esc', 'Hold open palm for 1s to double-click', 'Hold phone gesture for voice',
+              'Waist not visible')
 
     def __init__(self, translate):
         import cv2
@@ -125,18 +127,23 @@ class Preview:
     def prepare(self, frame):
         return self.cv.flip(frame, 1)
 
-    def update(self, frame, points, state):
+    def update(self, frame, points, state, waist=None):
         height, width = frame.shape[:2]
+        if waist is not None:
+            self.cv.line(frame, (0, int(height * waist.height_at(0))),
+                         (width - 1, int(height * waist.height_at(1))), (0, 200, 255), 2)
         for x, y in points:
             self.cv.circle(frame, (int(x * width), int(y * height)), 4, (0, 255, 0), -1)
         label = 'Scroll' if state.scrolling else 'No hand' if state.pointer is None else 'Drag' if state.dragging else 'Pinch' if state.pinched else 'Move'
+        if waist is None:
+            label = 'Waist not visible'
         self.cv.putText(frame, self._labels[label] + ' | ' + self._labels['Esc: stop'], (12, 28),
                        self.cv.FONT_HERSHEY_SIMPLEX, .7, (0, 255, 0), 2)
         progress = state.exit_progress if state.exit_progress is not None else state.escape_progress
-        progress_label = 'Hold rock hand to stop' if state.exit_progress is not None else 'Hold open palm to send Esc'
+        progress_label = 'Hold thumbs up to stop' if state.exit_progress is not None else 'Hold heavy metal for 1s to send Esc'
         if state.double_click_progress is not None:
             progress = state.double_click_progress
-            progress_label = 'Hold thumbs up to double-click'
+            progress_label = 'Hold open palm for 1s to double-click'
         if state.voice_progress is not None:
             progress = state.voice_progress
             progress_label = 'Hold phone gesture for voice'
@@ -151,7 +158,8 @@ class Preview:
         if self._initial_resize_pending:
             self.cv.resizeWindow(self.TITLE, *self.INITIAL_SIZE)
             self._initial_resize_pending = False
-        return (self.cv.waitKey(1) & 0xff != 27 and not self._escape_pressed()
+        key = self.cv.waitKey(1) & 0xff
+        return (key != 27 and not self._escape_pressed()
                 and self.cv.getWindowProperty(self.TITLE, self.cv.WND_PROP_VISIBLE) >= 1)
 
     def close(self):

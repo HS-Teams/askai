@@ -18,21 +18,30 @@ def main():
             raise KeyboardInterrupt
 
         signal.signal(signal.SIGTERM, interrupted)
+        notify({'type': 'loading', 'stage': 'imports'})
         from askai.gestures.preview import Pointer, Preview
-        from askai.gestures.tracker import HandTracker, model_path
+        from askai.gestures.tracker import HandTracker, model_path, pose_model_path
         from askai.gestures.session import run_session
         from askai.core.permissions.grants import grants
         from askai.core.support.app_paths import askai_data_dir
         import cv2
         with ExitStack() as resources:
+            notify({'type': 'loading', 'stage': 'pointer'})
             pointer = Pointer()
             resources.callback(pointer.release)
-            tracker = HandTracker(model_path(askai_data_dir()))
+            notify({'type': 'loading', 'stage': 'model'})
+            path = model_path(askai_data_dir())
+            notify({'type': 'loading', 'stage': 'body_model'})
+            pose_path = pose_model_path(askai_data_dir())
+            notify({'type': 'loading', 'stage': 'detector'})
+            tracker = HandTracker(path, pose_path)
             resources.callback(tracker.close)
+            notify({'type': 'loading', 'stage': 'camera'})
             camera = cv2.VideoCapture(camera_index)
             resources.callback(camera.release)
             if not camera.isOpened():
                 raise RuntimeError('Cannot open the gesture camera')
+            notify({'type': 'loading', 'stage': 'preview'})
             view = Preview(lambda text: labels[text])
             resources.callback(view.close)
             notify('started')

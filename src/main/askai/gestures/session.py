@@ -1,9 +1,10 @@
 """Coordinate injected capture, detector, pointer and view without owning UI."""
 from time import monotonic
-from math import isfinite, hypot
-from askai.gestures.controller import GestureController
+from math import dist, isfinite, hypot
+from askai.gestures.controller import GestureController, GestureState
 
-INACTIVITY_SECONDS = 5.0
+INACTIVITY_SECONDS = 2.5
+RESUME_HOLD_SECONDS = 3.0
 
 GRANTS = ('camera.preview.local', 'desktop.pointer.move', 'desktop.pointer.click', 'desktop.keyboard.escape', 'desktop.pointer.scroll', 'microphone.listen.local')
 
@@ -17,6 +18,9 @@ def authorize(policy, interact):
 def run_session(camera, tracker, pointer, view, policy, notify=lambda kind: None, should_stop=lambda: False, clock=monotonic):
     controller = GestureController(clock)
     last_recognized = clock()
+    waiting = False
+    resume_since = None
+    waist_missing = False
     pressed = False
     scrolling = False
     scroll_direction = 0
@@ -25,21 +29,50 @@ def run_session(camera, tracker, pointer, view, policy, notify=lambda kind: None
             ok, frame = camera.read()
             if not ok:
                 raise RuntimeError('Cannot read the gesture camera')
-            points = [(1 - x, y) for x, y in tracker.detect(frame)]
+            image_points, world_points, waist = tracker.detect(frame)
+            points = [(1 - x, y) for x, y in image_points]
+            waist = waist.mirrored() if waist is not None else None
+            if waist is None and not waist_missing:
+                notify('waist_missing')
+            waist_missing = waist is None
             frame = view.prepare(frame)
-            state = controller.update(points, frame.shape[1] / frame.shape[0])
-            if not view.update(frame, points, state):
-                return
             now = clock()
             aspect = frame.shape[1] / frame.shape[0]
-            recognized = (len(points) == 21 and all(isfinite(v) for point in points for v in point)
+            inside = waist is not None and waist.allows(points)
+            recognized = (inside and all(isfinite(v) for point in points for v in point)
+                          and len(world_points) == 21
+                          and all(len(point) == 3 and all(isfinite(v) for v in point) for point in world_points)
+                          and 0 < dist(world_points[5], world_points[17]) < float('inf')
                           and hypot((points[5][0] - points[17][0]) * aspect,
                                     points[5][1] - points[17][1]) >= .01)
             if recognized:
                 last_recognized = now
-            elif now - last_recognized > INACTIVITY_SECONDS:
-                notify('inactive')
+                if waiting:
+                    if resume_since is None:
+                        resume_since = now
+                    if now - resume_since >= RESUME_HOLD_SECONDS:
+                        waiting = False
+                        resume_since = None
+                        notify('resumed')
+            else:
+                resume_since = None
+                if not waiting and now - last_recognized >= INACTIVITY_SECONDS:
+                    waiting = True
+                    pointer.release()
+                    controller.reset()
+                    pressed = scrolling = False
+                    scroll_direction = 0
+                    notify('inactive')
+            if not inside:
+                state = controller.suspend()
+            elif waiting:
+                state = GestureState()
+            else:
+                state = controller.update(points, aspect, world_points=world_points)
+            if not view.update(frame, points, state, waist):
                 return
+            if waiting:
+                continue
             if state.exit_requested:
                 notify('exit')
                 return

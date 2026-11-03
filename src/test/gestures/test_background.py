@@ -1,3 +1,5 @@
+from test_gestures import hand
+from landmark_fixtures import detection
 import json
 import os
 from pathlib import Path
@@ -51,7 +53,7 @@ class RecognitionEventsTests(unittest.TestCase):
     def test_events_are_transitions_not_per_frame(self):
         camera, tracker, pointer, view, policy, notify = [Mock() for _ in range(6)]
         camera.read.return_value = True, np.zeros((10, 10, 3))
-        tracker.detect.return_value = []
+        tracker.detect.return_value = detection(hand())
         view.prepare.side_effect = lambda frame: frame
         view.update.side_effect = [True] * 5 + [False]
         with patch('askai.gestures.session.GestureController') as controller:
@@ -69,3 +71,52 @@ class RecognitionEventsTests(unittest.TestCase):
         camera.release.assert_called_once()
         tracker.close.assert_called_once()
         view.close.assert_called_once()
+
+class StartupTests(unittest.TestCase):
+    def test_loading_stages_reach_preloader_and_pause_remains_a_running_event(self):
+        with TemporaryDirectory() as storage, patch.object(background, '_process', None), patch.object(
+                background.subprocess, 'Popen'), patch.object(background, 'Thread') as thread:
+            def deliver():
+                fd, _, notify = thread.call_args.kwargs['args']
+                os.close(fd)
+                notify({'type': 'loading', 'stage': 'imports'})
+                notify({'type': 'loading', 'stage': 'camera'})
+                notify('started')
+                notify('inactive')
+                notify('resumed')
+
+            thread.return_value.start.side_effect = deliver
+            notify, progress = Mock(), Mock()
+            result = background.launch(0, storage, {}, notify, wait_ready=True, on_progress=progress)
+            self.assertEqual(result['status'], 'started')
+            self.assertEqual([call.args[0] for call in progress.call_args_list], ['imports', 'camera'])
+            self.assertEqual([call.args[0] for call in notify.call_args_list], ['inactive', 'resumed'])
+
+    def test_startup_waits_for_ready_and_reports_failure(self):
+        for event in ('started', 'failed', 'stopped'):
+            with self.subTest(event=event), TemporaryDirectory() as storage, patch.object(
+                    background, '_process', None), patch.object(background.subprocess, 'Popen') as popen, patch.object(
+                    background, 'Thread') as thread:
+                process = popen.return_value
+                def deliver():
+                    fd, _, notify = thread.call_args.kwargs['args']
+                    os.close(fd)
+                    notify(event)
+                thread.return_value.start.side_effect = deliver
+                notify = Mock()
+                if event == 'started':
+                    result = background.launch(0, storage, {}, notify, wait_ready=True)
+                    self.assertEqual(result['status'], 'started')
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'failed to start'):
+                        background.launch(0, storage, {}, notify, wait_ready=True)
+                notify.assert_not_called()
+
+    def test_startup_timeout_stops_owned_worker(self):
+        with TemporaryDirectory() as storage, patch.object(background, '_process', None), patch.object(
+                background.subprocess, 'Popen'), patch.object(background, 'Thread') as thread, patch.object(
+                background, 'STARTUP_TIMEOUT_SECONDS', 0), patch.object(background, 'stop') as stop:
+            with self.assertRaisesRegex(RuntimeError, 'timed out'):
+                background.launch(0, storage, {}, Mock(), wait_ready=True)
+            os.close(thread.call_args.kwargs['args'][0])
+            stop.assert_called_once()

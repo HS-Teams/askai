@@ -1,3 +1,5 @@
+from test_gestures import hand
+from landmark_fixtures import detection, world_points
 import unittest
 from unittest.mock import Mock, patch
 import numpy as np
@@ -20,39 +22,39 @@ class ScrollTests(unittest.TestCase):
         clock = Mock(return_value=0.)
         control = GestureController(clock)
         centered = [(x, y - .4) for x, y in fingers()]
-        self.assertTrue(control.update(centered).scrolling)
+        self.assertTrue(control.update(centered, world_points=world_points(centered)).scrolling)
         clock.return_value = .499
-        self.assertTrue(control.update(centered).scrolling)
+        self.assertTrue(control.update(centered, world_points=world_points(centered)).scrolling)
         clock.return_value = .5
-        state = control.update(centered)
+        state = control.update(centered, world_points=world_points(centered))
         self.assertFalse(state.scrolling)
         self.assertIsNone(state.pointer)
         clock.return_value = 1.1
-        self.assertFalse(control.update(centered).scrolling)
+        self.assertFalse(control.update(centered, world_points=world_points(centered)).scrolling)
 
     def test_missing_hand_times_out_scroll(self):
         clock = Mock(return_value=0.)
         control = GestureController(clock)
-        control.update(fingers())
+        control.update(fingers(), world_points=world_points(fingers()))
         clock.return_value = .5
-        self.assertFalse(control.update([]).scrolling)
+        self.assertFalse(control.update([], world_points=world_points([])).scrolling)
 
 
-    def test_scroll_rock_exit_requires_continuous_hold_and_stops_scrolling(self):
+    def test_scroll_thumb_exit_requires_continuous_second_and_stops_scrolling(self):
         clock = Mock(return_value=0.)
         control = GestureController(clock)
-        control.update(fingers())
+        control.update(fingers(), world_points=world_points(fingers()))
         other = fingers()
         other[8] = (.35, .75)
         other[4] = (.8, .8)
-        with patch('askai.gestures.controller.is_rock_hand', return_value=True):
-            first = control.update(other)
+        with patch('askai.gestures.controller.is_thumbs_up', return_value=True):
+            first = control.update(other, world_points=world_points(other))
             self.assertTrue(first.scrolling)
             self.assertFalse(first.exit_requested)
             clock.return_value = .499
-            self.assertFalse(control.update(other).exit_requested)
+            self.assertFalse(control.update(other, world_points=world_points(other)).exit_requested)
             clock.return_value = .5
-            last = control.update(other)
+            last = control.update(other, world_points=world_points(other))
             self.assertTrue(last.exit_requested)
             self.assertEqual(last.scroll_steps, 0)
             self.assertIsNone(last.pointer)
@@ -79,32 +81,32 @@ class ScrollTests(unittest.TestCase):
     def test_toggle_requires_new_gesture_and_half_second_cooldown(self):
         clock = Mock(return_value=0.)
         control = GestureController(clock)
-        self.assertTrue(control.update(fingers()).scrolling)
+        self.assertTrue(control.update(fingers(), world_points=world_points(fingers())).scrolling)
         other = fingers()
         other[8] = (.35, .75)
         other[4] = (.8, .8)
         clock.return_value = .2
-        self.assertTrue(control.update(other).scrolling)
+        self.assertTrue(control.update(other, world_points=world_points(other)).scrolling)
         clock.return_value = .3
-        self.assertTrue(control.update(fingers()).scrolling)
+        self.assertTrue(control.update(fingers(), world_points=world_points(fingers())).scrolling)
         clock.return_value = .6
-        self.assertTrue(control.update(fingers()).scrolling)
-        control.update(other)
-        self.assertFalse(control.update(fingers()).scrolling)
+        self.assertTrue(control.update(fingers(), world_points=world_points(fingers())).scrolling)
+        control.update(other, world_points=world_points(other))
+        self.assertFalse(control.update(fingers(), world_points=world_points(fingers())).scrolling)
         clock.return_value = .7
-        self.assertIsNone(control.update(other).pointer)
+        self.assertIsNone(control.update(other, world_points=world_points(other)).pointer)
         clock.return_value = 1.2
-        self.assertIsNotNone(control.update(other).pointer)
+        self.assertIsNotNone(control.update(other, world_points=world_points(other)).pointer)
 
     def test_active_scroll_ignores_palm_but_checks_thumbs_up(self):
         control = GestureController(Mock(return_value=0.))
-        control.update(fingers())
+        control.update(fingers(), world_points=world_points(fingers()))
         other = fingers()
         other[8] = (.35, .75)
         other[4] = (.8, .8)
         with patch('askai.gestures.controller.is_thumbs_up', return_value=False) as thumbs, patch(
                 'askai.gestures.controller.is_open_palm') as palm:
-            state = control.update([(x, y - .06) for x, y in other])
+            state = control.update([(x, y - .06) for x, y in other], world_points=world_points([(x, y - .06) for x, y in other]))
         thumbs.assert_called_once()
         palm.assert_not_called()
         self.assertTrue(state.scrolling)
@@ -115,10 +117,10 @@ class ScrollTests(unittest.TestCase):
     def test_hand_loss_preserves_mode_without_retrigger_or_scroll_jump(self):
         clock = Mock(return_value=0.)
         control = GestureController(clock)
-        control.update(fingers())
-        self.assertTrue(control.update([]).scrolling)
+        control.update(fingers(), world_points=world_points(fingers()))
+        self.assertTrue(control.update([], world_points=world_points([])).scrolling)
         clock.return_value = .2
-        state = control.update([(x, y - .2) for x, y in fingers()])
+        state = control.update([(x, y - .2) for x, y in fingers()], world_points=world_points([(x, y - .2) for x, y in fingers()]))
         self.assertTrue(state.scrolling)
         self.assertEqual(state.scroll_steps, 0)
 
@@ -144,15 +146,15 @@ class ScrollTests(unittest.TestCase):
 
     def test_controller_freezes_pointer_and_disallows_clicks(self):
         control = GestureController()
-        state = control.update(fingers())
+        state = control.update(fingers(), world_points=world_points(fingers()))
         self.assertTrue(state.scrolling)
         moved = [(x, y - .06) for x, y in fingers()]
-        state = control.update(moved)
+        state = control.update(moved, world_points=world_points(moved))
         self.assertEqual(state.scroll_steps, 0)
         self.assertIsNone(state.pointer)
         self.assertFalse(state.dragging)
-        control.update([])
-        self.assertEqual(control.update(moved).scroll_steps, 0)
+        control.update([], world_points=world_points([]))
+        self.assertEqual(control.update(moved, world_points=world_points(moved)).scroll_steps, 0)
 
     def test_scroll_denial_prevents_start(self):
         policy = GrantPolicy(lambda key: 'deny' if key.endswith('desktop.pointer.scroll') else 'allow')
@@ -162,7 +164,7 @@ class ScrollTests(unittest.TestCase):
     def test_session_emits_direction_changes_not_every_frame(self):
         camera, tracker, pointer, view, policy, notify = [Mock() for _ in range(6)]
         camera.read.return_value = True, np.zeros((10, 10, 3))
-        tracker.detect.return_value = []
+        tracker.detect.return_value = detection(hand())
         view.prepare.side_effect = lambda frame: frame
         view.update.side_effect = [True] * 5 + [False]
         with patch('askai.gestures.session.GestureController') as controller:

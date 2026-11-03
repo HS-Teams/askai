@@ -3,7 +3,9 @@ from askai.gestures.session import authorize
 from askai.gestures.background import launch
 
 MESSAGES = {
-    'inactive': 'No control hand recognized for more than five seconds. Stopping gesture control.',
+    'inactive': 'Gesture control paused. Keep your right hand visible above your waist for three seconds to resume.',
+    'waist_missing': 'Your hips could not be detected with enough confidence. Gesture commands are blocked. Adjust your body position so your shoulders and hips are visible to the camera.',
+    'resumed': 'Gesture control resumed.',
     'scroll_top': 'Scroll to top requested.',
     'scroll_bottom': 'Scroll to bottom requested.',
     'scroll_start': 'Scroll mode enabled. Repeat the two-finger gesture to disable it.',
@@ -13,9 +15,9 @@ MESSAGES = {
     'started': 'Gesture control started.',
     'pinch': 'Pinch recognized: mouse button held.',
     'release': 'Pinch released.',
-    'escape': 'Open palm recognized: Escape sent.',
-    'exit': 'Rock hand recognized: stopping gesture control.',
-    'double_click': 'Thumbs up recognized: double-click sent.',
+    'escape': 'Heavy metal gesture recognized: Escape sent.',
+    'double_click': 'Open palm recognized: double-click sent.',
+    'exit': 'Thumbs up recognized: stopping gesture control.',
     'stopped': 'Gesture control stopped.',
     'failed': 'Gesture control failed. See logs/gestures.log for details.',
 }
@@ -29,16 +31,14 @@ def start(camera_index=0):
     from askai.core.askai_events import events
     from askai.core.model.ai_reply import AIReply
     from askai.gestures.preview import Preview
+    from askai.gestures.sfx import play_init, play_quit, play_ptt
 
     if not authorize(grants, taius.interact):
         return {'status': 'cancelled'}
     labels = {text: msg.t(text) for text in Preview.LABELS}
 
     def notify(kind):
-        from askai.gestures.sfx import play_init, play_quit, play_ptt
-        if kind == 'started':
-            play_init()
-        elif kind == 'exit':
+        if kind == 'exit':
             play_quit()
         if kind == 'voice':
             play_ptt()
@@ -47,4 +47,12 @@ def start(camera_index=0):
         message = MESSAGES[kind]
         events.reply.emit(reply=AIReply.system(message))
 
-    return launch(camera_index, askai_data_dir(), labels, notify)
+    from askai.cli.gestures_loading import gestures_loading
+    from askai.core.support.text_formatter import text_formatter
+
+    with gestures_loading(text_formatter.console, msg.t) as update:
+        result = launch(camera_index, askai_data_dir(), labels, notify,
+                        wait_ready=True, on_progress=update)
+    play_init()
+    text_formatter.commander_print(msg.t(MESSAGES['started']))
+    return result

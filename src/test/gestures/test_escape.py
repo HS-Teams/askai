@@ -1,3 +1,5 @@
+from test_gestures import hand
+from landmark_fixtures import detection, world_points
 import unittest
 from unittest.mock import Mock, patch
 import numpy as np
@@ -20,14 +22,14 @@ class EscapeTests(unittest.TestCase):
         sound.start()
         self.addCleanup(sound.stop)
 
-    def test_one_escape_per_palm_hold_without_exit(self):
-        controller = GestureController(Mock(side_effect=[0, .25, .5, 2, 3, 3.5]))
-        states = [controller.update(palm()) for _ in range(4)]
-        self.assertEqual([s.escape_requested for s in states], [False, False, True, False])
-        self.assertTrue(all(s.pointer is None and not s.dragging and not s.exit_requested for s in states))
-        controller.update([])
-        self.assertFalse(controller.update(palm()).escape_requested)
-        self.assertTrue(controller.update(palm()).escape_requested)
+    def test_one_double_click_per_palm_hold_without_escape_or_exit(self):
+        controller = GestureController(Mock(side_effect=[0, .999, 1., 2, 3, 4]))
+        states = [controller.update(palm(), world_points=world_points(palm())) for _ in range(4)]
+        self.assertEqual([s.double_click_requested for s in states], [False, False, True, False])
+        self.assertTrue(all(s.pointer is None and not s.dragging and not s.exit_requested and not s.escape_requested for s in states))
+        controller.update([], world_points=world_points([]))
+        self.assertFalse(controller.update(palm(), world_points=world_points(palm())).double_click_requested)
+        self.assertTrue(controller.update(palm(), world_points=world_points(palm())).double_click_requested)
 
     def test_escape_is_delivered_to_same_focused_app_key_down_and_up(self):
         quartz, appkit = Mock(), Mock()
@@ -41,7 +43,7 @@ class EscapeTests(unittest.TestCase):
     def test_session_sends_escape_and_continues(self):
         camera, tracker, pointer, view, policy = [Mock() for _ in range(5)]
         camera.read.return_value = True, np.zeros((10, 10, 3))
-        tracker.detect.return_value = []
+        tracker.detect.return_value = detection(hand())
         view.prepare.side_effect = lambda frame: frame
         view.update.side_effect = [True, True, False]
         with patch('askai.gestures.session.GestureController') as controller:

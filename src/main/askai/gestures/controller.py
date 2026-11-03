@@ -1,6 +1,6 @@
 """Pure gesture state and normalized pointer coordinates; no camera or UI."""
 from dataclasses import dataclass
-from math import hypot, isfinite
+from math import dist, hypot, isfinite
 from time import monotonic
 from askai.gestures.pointer_response import PointerResponse
 from askai.gestures.scroll import ScrollMotion, is_scroll_hand
@@ -32,6 +32,8 @@ class GestureController:
     SCROLL_COOLDOWN_SECONDS = .5
     SCROLL_IDLE_SECONDS = .5
     EXIT_HOLD_SECONDS = .5
+    ESCAPE_HOLD_SECONDS = 1.0
+    DOUBLE_CLICK_HOLD_SECONDS = 1.0
     DRAG_HOLD_SECONDS = .5
     CLOSE_RATIO = .35
     OPEN_RATIO = .50
@@ -55,11 +57,11 @@ class GestureController:
         self._scroll_mode = False
         self._scroll_seen = False
         self._scroll_toggled_at = None
-        self._double_started = None
-        self._double_sent = False
         self._exit_started = None
         self._escape_started = None
         self._escape_sent = False
+        self._double_started = None
+        self._double_sent = False
         self._pointer = None
         self._armed = False
         self._dragging = False
@@ -67,8 +69,17 @@ class GestureController:
         self._drag_origin = None
         self._pinch_started = None
 
-    def update(self, points, aspect=1.0):
-        if (len(points) != 21 or not all(isfinite(v) for point in points for v in point)
+    def suspend(self):
+        """Cancel gestures outside the control area while retaining the cursor target."""
+        pointer = self._pointer
+        self.reset()
+        self._pointer = pointer
+        return GestureState()
+
+    def update(self, points, aspect=1.0, *, world_points):
+        if (len(points) != 21 or not all(len(point) == 2 and all(isfinite(v) for v in point) for point in points)
+                or len(world_points) != 21
+                or not all(len(point) == 3 and all(isfinite(v) for v in point) for point in world_points)
                 or not isfinite(aspect) or aspect <= 0):
             return self._tracking_lost()
         def distance(a, b):
@@ -76,14 +87,25 @@ class GestureController:
         scale = distance(5, 17)
         if scale < .01:
             return self._tracking_lost()
-        ratio = distance(4, 8) / scale
+        world_scale = dist(world_points[5], world_points[17])
+        if not isfinite(world_scale) or world_scale <= 0:
+            return self._tracking_lost()
+        # Rotation can overlap separated fingertips in the image. Measure contact in 3D.
+        ratio = dist(world_points[4], world_points[8]) / world_scale
+        if not isfinite(ratio):
+            return self._tracking_lost()
         commands_allowed = ratio >= self.OPEN_RATIO
+        palm_gesture = commands_allowed and not self._scroll_mode and is_open_palm(points, aspect)
+        rock_gesture = commands_allowed and not self._scroll_mode and is_rock_hand(points, aspect)
+        if not palm_gesture:
+            self._double_started = None
+            self._double_sent = False
+        if not rock_gesture:
+            self._escape_started = None
+            self._escape_sent = False
         if not is_phone_hand(points, aspect):
             self._voice_started = None
             self._voice_sent = False
-        if not is_thumbs_up(points, aspect):
-            self._double_started = None
-            self._double_sent = False
         scroll_gesture = commands_allowed and is_scroll_hand(points, aspect)
         now = self._clock() if scroll_gesture or self._scroll_mode or self._scroll_toggled_at is not None else None
         cooled_down = (self._scroll_toggled_at is None
@@ -97,7 +119,7 @@ class GestureController:
             self._escape_sent = False
             self._armed = self._dragging = False
         self._scroll_seen = scroll_gesture
-        if commands_allowed and is_rock_hand(points, aspect):
+        if commands_allowed and is_thumbs_up(points, aspect):
             self._escape_started = None
             self._escape_sent = False
             now = self._clock()
@@ -111,6 +133,8 @@ class GestureController:
             return GestureState(exit_progress=progress, exit_requested=progress >= 1., scrolling=self._scroll_mode)
         self._exit_started = None
         if self._scroll_mode:
+            self._double_started = self._escape_started = None
+            self._double_sent = self._escape_sent = False
             steps = self._scroll.update(points[0][1])
             if steps or self._scroll.boundary:
                 self._scroll_idle_since = now
@@ -122,18 +146,6 @@ class GestureController:
             return GestureState(scrolling=True, scroll_steps=steps, scroll_boundary=self._scroll.boundary)
         if self._scroll_toggled_at is not None and now - self._scroll_toggled_at < self.SCROLL_COOLDOWN_SECONDS:
             return GestureState()
-        if commands_allowed and is_thumbs_up(points, aspect):
-            now = self._clock()
-            if self._double_started is None:
-                self._double_started = now
-            progress = min(1., max(0., (now - self._double_started) / self.EXIT_HOLD_SECONDS))
-            send = progress >= 1. and not self._double_sent
-            self._double_sent = self._double_sent or send
-            self._armed = self._dragging = False
-            self._escape_started = self._voice_started = None
-            return GestureState(double_click_progress=progress, double_click_requested=send)
-        self._double_started = None
-        self._double_sent = False
         if commands_allowed and is_phone_hand(points, aspect):
             now = self._clock()
             if self._voice_started is None:
@@ -147,11 +159,20 @@ class GestureController:
             return GestureState(voice_progress=progress, voice_requested=send)
         self._voice_started = None
         self._voice_sent = False
-        if commands_allowed and is_open_palm(points, aspect):
+        if palm_gesture:
+            now = self._clock()
+            if self._double_started is None:
+                self._double_started = now
+            progress = min(1., max(0., (now - self._double_started) / self.DOUBLE_CLICK_HOLD_SECONDS))
+            send = progress >= 1. and not self._double_sent
+            self._double_sent = self._double_sent or send
+            self._armed = self._dragging = False
+            return GestureState(double_click_progress=progress, double_click_requested=send)
+        if rock_gesture:
             now = self._clock()
             if self._escape_started is None:
                 self._escape_started = now
-            progress = min(1., max(0., (now - self._escape_started) / self.EXIT_HOLD_SECONDS))
+            progress = min(1., max(0., (now - self._escape_started) / self.ESCAPE_HOLD_SECONDS))
             send = progress >= 1. and not self._escape_sent
             self._escape_sent = self._escape_sent or send
             self._armed = self._dragging = False
