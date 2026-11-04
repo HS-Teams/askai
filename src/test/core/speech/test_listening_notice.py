@@ -3,6 +3,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch, call
+from askai.cli.dictation_input import cancel_requested
+from askai.core.speech.capture import CaptureCancelled
 
 
 class ListeningNoticeTests(unittest.TestCase):
@@ -27,32 +29,35 @@ class ListeningNoticeTests(unittest.TestCase):
             self.assertEqual(scope['listen'](SimpleNamespace(speech=speech)), 'Olá')
             self.assertEqual(order, ['cancel', 'capture'])
             speech.speak.assert_not_called()
-            recorder.listen.assert_called_once_with(language='pt_BR')
+            recorder.listen.assert_called_once_with(language='pt_BR', end_silence=2.5,
+                                                   phrase_limit=0, cancel_requested=cancel_requested)
 
     def test_ptt_pauses_gestures_and_releases_pause_even_on_capture_failure(self):
         from askai.gestures import background
         path = Path(__file__).resolve().parents[3] / 'main/askai/core/support/shared_instances.py'
         method = next(n for n in ast.walk(ast.parse(path.read_text()))
                       if isinstance(n, ast.FunctionDef) and n.name == 'listen')
-        for fails in (False, True):
-            with self.subTest(fails=fails):
+        for failure in (None, RuntimeError('Capture failed'), CaptureCancelled()):
+            with self.subTest(failure=failure):
                 process = Mock(poll=Mock(return_value=None))
                 recorder, speech = Mock(), Mock()
 
                 def capture(**kwargs):
                     process.stdin.write.assert_called_once_with('pause\n')
                     process.stdin.flush.assert_called_once()
-                    if fails:
-                        raise RuntimeError('Capture failed')
+                    if failure:
+                        raise failure
                     return None, ' Olá '
 
                 recorder.listen.side_effect = capture
                 scope = dict(recorder=recorder, configs=SimpleNamespace(stt_language='pt_BR'))
                 exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), 'exec'), scope)
                 with patch.object(background, '_process', process):
-                    if fails:
+                    if isinstance(failure, RuntimeError):
                         with self.assertRaisesRegex(RuntimeError, 'Capture failed'):
                             scope['listen'](SimpleNamespace(speech=speech))
+                    elif isinstance(failure, CaptureCancelled):
+                        self.assertIsNone(scope['listen'](SimpleNamespace(speech=speech)))
                     else:
                         self.assertEqual(scope['listen'](SimpleNamespace(speech=speech)), 'Olá')
                 self.assertEqual(process.stdin.write.call_args_list, [call('pause\n'), call('resume\n')])

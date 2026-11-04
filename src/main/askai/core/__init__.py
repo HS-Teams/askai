@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from .component.retrieval import Document
     from .model.screenshot_result import DocumentModel
     from .agents.elicitation import ELICITATION_METHOD
-    from .speech.dictation import END_SILENCE_SECONDS
+    from .speech.capture import END_SILENCE_SECONDS
     from .engine.runtime import ENGINES
     from .agents.enrollment_tool import ENROLLMENT_TOOL
     from .enums.acc_color import EXCELLENT
@@ -213,7 +213,7 @@ _EXPORTS = {
     'Document': ('component.retrieval', 'Document'),
     'DocumentModel': ('model.screenshot_result', 'DocumentModel'),
     'ELICITATION_METHOD': ('agents.elicitation', 'ELICITATION_METHOD'),
-    'END_SILENCE_SECONDS': ('speech.dictation', 'END_SILENCE_SECONDS'),
+    'END_SILENCE_SECONDS': ('speech.capture', 'END_SILENCE_SECONDS'),
     'ENGINES': ('engine.runtime', 'ENGINES'),
     'ENROLLMENT_TOOL': ('agents.enrollment_tool', 'ENROLLMENT_TOOL'),
     'EXCELLENT': ('enums.acc_color', 'EXCELLENT'),

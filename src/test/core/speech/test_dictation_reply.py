@@ -5,6 +5,7 @@ from types import SimpleNamespace as NS
 import unittest
 from unittest.mock import Mock, patch, call
 from askai.core.speech.narration import parse_narration
+from askai.core.speech.capture import CaptureCancelled
 
 
 class DictationReplyTests(unittest.TestCase):
@@ -23,9 +24,9 @@ class DictationReplyTests(unittest.TestCase):
             'askai.core.askai_prompt': NS(prompt=Mock()),
             'askai.core.support.inference': NS(complete=complete),
             'askai.core.support.app_paths': NS(askai_data_dir=Mock()),
-            'askai.cli.dictation_input': NS(finish_requested=Mock()),
+            'askai.cli.dictation_input': NS(cancel_requested=Mock()),
         }
-        for original in ('', 'Original transcription', RuntimeError('Capture failed')):
+        for original in ('', 'Original transcription', RuntimeError('Capture failed'), CaptureCancelled()):
             process = Mock(poll=Mock(return_value=None))
             with self.subTest(original=original), TemporaryDirectory() as directory, patch.dict(
                     'sys.modules', modules), patch('askai.gestures.background._process', process):
@@ -38,7 +39,12 @@ class DictationReplyTests(unittest.TestCase):
                     return None, original
 
                 recorder.listen.side_effect = capture
-                if isinstance(original, Exception):
+                if isinstance(original, CaptureCancelled):
+                    scope['dictate'](str(destination))
+                    self.assertFalse(destination.exists())
+                    self.assertFalse(destination.with_name(destination.name + '.orig').exists())
+                    scope['cli_output'].render_command.assert_called_with('Dictation cancelled.')
+                elif isinstance(original, Exception):
                     with self.assertRaisesRegex(RuntimeError, 'Capture failed'):
                         scope['dictate'](str(destination))
                 elif original:
@@ -66,6 +72,9 @@ class DictationReplyTests(unittest.TestCase):
         process = Mock(poll=Mock(return_value=None))
 
         def capture(**kwargs):
+            self.assertEqual(kwargs['end_silence'], 2.5)
+            self.assertEqual(kwargs['phrase_limit'], 0)
+            self.assertIsNotNone(kwargs['cancel_requested'])
             process.stdin.write.assert_called_once_with('pause\n')
             process.stdin.flush.assert_called_once()
             return None, 'original'
@@ -87,7 +96,7 @@ class DictationReplyTests(unittest.TestCase):
             'askai.core.speech.dictation_memory': NS(register=Mock()),
             'askai.core.support.persistent_memory': NS(PersistentMemory=Mock()),
             'askai.core.support.app_paths': NS(askai_data_dir=Mock()),
-            'askai.cli.dictation_input': NS(finish_requested=Mock()),
+            'askai.cli.dictation_input': NS(cancel_requested=Mock()),
         }
         with TemporaryDirectory() as directory, patch.dict('sys.modules', modules), patch(
                 'askai.gestures.background._process', process):

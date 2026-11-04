@@ -157,7 +157,8 @@ class TtsSttCmd(ABC):
         from askai.core.askai_messages import msg
         from askai.core.askai_prompt import prompt
         from askai.core.speech import dictation
-        from askai.cli.dictation_input import finish_requested
+        from askai.cli.dictation_input import cancel_requested
+        from askai.core.speech.capture import CaptureCancelled, END_SILENCE_SECONDS
         from askai.core.support.app_paths import askai_data_dir
         from askai.core.support.inference import complete
         from askai.gestures.background import pause_for_ptt
@@ -169,7 +170,7 @@ class TtsSttCmd(ABC):
             directory.mkdir(parents=True, exist_ok=True)
             destination = directory / f"dictation-{uuid4().hex}.txt"
         dictation.validate_destination(destination)
-        instruction = msg.t("Dictating. Press Esc or pause for more than 3 seconds to finish and save.")
+        instruction = msg.t(f"Dictating. Pause for {END_SILENCE_SECONDS:g} seconds to finish and save. Press Esc to cancel.")
 
         def ready():
             cli_output.render_command(instruction)
@@ -178,14 +179,18 @@ class TtsSttCmd(ABC):
         from askai.core.component.multimedia.audio_player import player
         with pause_for_ptt():
             player.play_sfx('ui/dictate-start')
-            _, original = recorder.listen(
-                raise_on_timeout=False, raise_on_intelligible=False,
-                counter_msg=msg.dictating(),
-                end_silence=dictation.END_SILENCE_SECONDS, phrase_limit=0,
-                finish_requested=finish_requested,
-                wait_for_speech=True, on_ready=ready,
-                on_captured=lambda: player.play_sfx('ui/dictate-end'),
-            )
+            try:
+                _, original = recorder.listen(
+                    raise_on_timeout=False, raise_on_intelligible=False,
+                    counter_msg=msg.dictating(),
+                    end_silence=END_SILENCE_SECONDS, phrase_limit=0,
+                    cancel_requested=cancel_requested,
+                    wait_for_speech=True, on_ready=ready,
+                    on_captured=lambda: player.play_sfx('ui/dictate-end'),
+                )
+            except CaptureCancelled:
+                cli_output.render_command(msg.t("Dictation cancelled."))
+                return
         if not original:
             cli_output.render_command(msg.t("Dictation produced no text!"))
             return

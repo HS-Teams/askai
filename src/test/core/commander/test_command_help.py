@@ -92,7 +92,8 @@ class CommandHelpTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         handler.dictate.assert_called_once_with('notes.txt')
         help_result = CliRunner().invoke(self.group, ['dictate', '--help'])
-        self.assertIn('3 seconds', help_result.output)
+        self.assertIn('2.5 seconds', help_result.output)
+        self.assertIn('Esc to cancel', help_result.output)
         self.assertIn('copied to the clipboard', ' '.join(help_result.output.split()))
 
     def test_paste_waits_for_focus_change_and_supports_immediate_paste(self):

@@ -540,7 +540,8 @@ def tts(texts: tuple[str, ...], dest_dir: str, playback: bool) -> None:
 def dictate(dest_file: str) -> None:
     """Dictate continuously, preserve the original and save a refined copy.
 
-    Press Esc or pause for more than 3 seconds to finish and save. Existing files are never overwritten. Without --dest-file,
+    Pause for 2.5 seconds to finish and save, or press Esc to cancel and discard the recording.
+    Existing files are never overwritten. Without --dest-file,
     both versions are saved in the AskAI data directory under dictations/.
     The refined text is also copied to the clipboard.
     """

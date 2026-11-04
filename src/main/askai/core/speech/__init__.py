@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .audio_tags import AUDIO_TAG
     from .codex_tts import CodexTTS
-    from .dictation import END_SILENCE_SECONDS
+    from .capture import END_SILENCE_SECONDS
     from .elevenlabs_tts import ElevenLabsTTS
     from .fallback_tts import FallbackTTS
     from .output_queue import MAX_PENDING
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 _EXPORTS = {
     'AUDIO_TAG': ('audio_tags', 'AUDIO_TAG'),
     'CodexTTS': ('codex_tts', 'CodexTTS'),
-    'END_SILENCE_SECONDS': ('dictation', 'END_SILENCE_SECONDS'),
+    'END_SILENCE_SECONDS': ('capture', 'END_SILENCE_SECONDS'),
     'ElevenLabsTTS': ('elevenlabs_tts', 'ElevenLabsTTS'),
     'FallbackTTS': ('fallback_tts', 'FallbackTTS'),
     'MAX_PENDING': ('output_queue', 'MAX_PENDING'),

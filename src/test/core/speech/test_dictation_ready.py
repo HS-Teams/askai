@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 import wave
 from speech_recognition import Recognizer, AudioFile, WaitTimeoutError, UnknownValueError, RequestError
-from askai.core.speech.capture import capture_phrase
+from askai.core.speech.capture import CaptureCancelled, capture_phrase
 
 
 class DictationReadyTests(unittest.TestCase):
@@ -43,7 +43,8 @@ class DictationReadyTests(unittest.TestCase):
                      events=Mock(), WaitTimeoutError=WaitTimeoutError, UnknownValueError=UnknownValueError,
                      RequestError=RequestError)
         exec(compile(module, str(path), 'exec'), scope)
-        for wait, expected in ((True, None), (False, 3.0)):
+        for wait, expected, cancelled in ((True, None, False), (False, 3.0, False),
+                                          (True, None, True), (False, 3.0, True)):
             order = []
             scope["events"].listening.emit.side_effect = lambda **args: order.append("visible") if args.get("listening") else None
             recorder = Mock()
@@ -51,8 +52,22 @@ class DictationReadyTests(unittest.TestCase):
             def capture(*args, **kwargs):
                 order.append('capture')
                 self.assertEqual(kwargs['timeout'], expected)
+                if cancelled:
+                    raise CaptureCancelled()
                 return SimpleNamespace(frame_data=b'')
             with patch('askai.core.speech.capture.capture_phrase', side_effect=capture):
-                scope['listen'](recorder, wait_for_speech=wait, on_ready=lambda: order.append('ready'),
-                                on_captured=lambda: order.append('captured'))
-            self.assertEqual(order, ['calibrate', 'ready', 'visible', 'capture', 'captured'])
+                def listen():
+                    return scope['listen'](recorder, wait_for_speech=wait,
+                                           on_ready=lambda: order.append('ready'),
+                                           on_captured=lambda: order.append('captured'))
+                if cancelled:
+                    with self.assertRaises(CaptureCancelled):
+                        listen()
+                else:
+                    listen()
+            self.assertEqual(order, ['calibrate', 'ready', 'visible', 'capture'] +
+                             ([] if cancelled else ['captured']))
+            recorder._write_audio_file.assert_not_called()
+            scope['threading'].Event.return_value.set.assert_called()
+            scope['threading'].Thread.return_value.join.assert_called()
+            mic.return_value.__exit__.assert_called()

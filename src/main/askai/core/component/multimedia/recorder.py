@@ -162,7 +162,7 @@ class Recorder(metaclass=Singleton):
         *,
         end_silence: float | None = None,
         phrase_limit: float | None = None,
-        finish_requested=None,
+        cancel_requested=None,
         wait_for_speech: bool = False,
         on_ready=None,
         on_captured=None,
@@ -205,7 +205,7 @@ class Recorder(metaclass=Singleton):
                                      if end_silence is None else end_silence),
                         phrase_limit=limit,
                         tail_margin=seconds(configs.recorder_tail_margin_millis),
-                        finish_requested=finish_requested,
+                        cancel_requested=cancel_requested,
                     )
                 finally:
                     stop_event.set()

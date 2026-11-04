@@ -12,9 +12,6 @@ REFINEMENT_SCHEMA = {
 }
 
 
-END_SILENCE_SECONDS = 3.0
-
-
 def original_path(destination: Path) -> Path:
     return destination.with_name(destination.name + ".orig")
 
