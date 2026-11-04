@@ -6,7 +6,7 @@ from askai.core.support.performance import timed
 from datetime import date
 from pathlib import Path
 from threading import Event, Lock
-from askai.core.agents.contracts import AgentBackend, AgentTask, AgentError, AgentEvent
+from askai.core.agents.contracts import AgentBackend, AgentTask, AgentError, AgentEvent, AgentSessionNotFound
 
 
 class Orchestrator:
@@ -39,7 +39,7 @@ class Orchestrator:
         self._last_session_key = None
         self._record_history = None
 
-    def reset_session(self, cwd: Path) -> None:
+    def reset_session(self, cwd: Path, emit=lambda event: None) -> None:
         if not self._active.acquire(blocking=False):
             raise AgentError(
                 "Wait for the current task to finish before resetting its session"
@@ -52,6 +52,7 @@ class Orchestrator:
             reset_saved_session(
                 self._backend, self._durable if self._resume_history() else None,
                 self._agent_name, key, day, self._sessions.get((key, day)),
+                emit=emit, model=self._model,
             )
             self._sessions.pop((key, day), None)
             self._last_session_key = None
@@ -104,11 +105,24 @@ class Orchestrator:
         self._record_history = recording
         try:
             if self._durable and recording:
-                request = self._durable.begin(self._agent_name, key, question, day=day)
                 if session_key not in self._sessions and self._resume_history():
                     session = self._durable.session(self._agent_name, key, day)
                     if session:
                         self._sessions[session_key] = session
+                    elif previous := self._durable.previous_session(self._agent_name, key, day):
+                        from askai.core.orchestration.session_compaction import compact_saved_session
+                        previous_day, previous_session = previous
+                        try:
+                            compact_saved_session(
+                                self._backend, self._durable, self._agent_name, key,
+                                previous_day, emit, session=previous_session, model=self._model,
+                            )
+                        except AgentSessionNotFound as error:
+                            from askai.core.orchestration.session_reset import retire_missing_session
+                            retire_missing_session(self._durable, self._agent_name, key,
+                                                   previous_day, previous_session, error)
+                            self._sessions.pop((key, previous_day), None)
+                request = self._durable.begin(self._agent_name, key, question, day=day)
 
                 def emit(event):
                     if event.kind in {

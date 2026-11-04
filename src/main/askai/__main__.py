@@ -208,9 +208,6 @@ class Main(TUIApplication):
             self._askai.run()
             shared_instances.shared.context.save()
             shared_instances.shared.speech.wait_output()
-            from askai.core.processors.taius import taius
-
-            taius.compact_on_exit()
         finally:
             shared_instances.shared.close()
 

@@ -72,8 +72,6 @@ class AskAiSettings(metaclass=Singleton):
         for name in GRANTS:
             if self.get(PREFIX + name, None) is None:
                 self.put(PREFIX + name, "ask")
-        if self.get("askai.session.compact.on.exit", None) is None:
-            self.put("askai.session.compact.on.exit", True)
 
     def __str__(self) -> str:
         return self.search()
@@ -126,7 +124,6 @@ class AskAiSettings(metaclass=Singleton):
         self._settings.put("askai.cache.enabled", "askai", True)
         self._settings.put("askai.cache.ttl.minutes", "askai", 25)
         self._settings.put("askai.context.keep.conversation", "askai", True)
-        self._settings.put("askai.session.compact.on.exit", "askai", True)
         self._settings.put("askai.preferred.language", "askai", "")
         self._settings.put("askai.router.mode.default", "askai", "taius")
         self._settings.put("askai.router.pass.threshold", "askai", "moderate")

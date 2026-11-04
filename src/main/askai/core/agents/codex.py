@@ -17,7 +17,7 @@ from threading import Event
 from time import monotonic
 from typing import Callable
 
-from askai.core.agents.contracts import AgentError, AgentEvent, AgentResult, AgentTask
+from askai.core.agents.contracts import AgentError, AgentEvent, AgentResult, AgentTask, AgentSessionNotFound
 from askai.core.agents.stdio_transport import StdioTransport
 
 
@@ -88,19 +88,29 @@ class CodexBackend:
     def compact(self, session, cwd, model=None):
         from askai.core.agents.compaction import compact_thread
 
-        with self._connections.lease(True) as transport:
-            compact_thread(transport, session, cwd, model)
+        try:
+            with self._connections.lease(True) as transport:
+                compact_thread(transport, session, cwd, model)
+        except AgentSessionNotFound:
+            self._forget_session(session)
+            raise
         if session == self._context_session:
             self._context_usage = None
 
     def archive(self, session):
         if self.session_is_private(session):
-            if session == self._context_session:
-                self._context_usage = None
-                self._context_session = None
+            self._forget_session(session)
             return
-        with self._connections.lease(False, actions_allowed=False) as transport:
-            transport.request("thread/archive", {"threadId": session})
+        try:
+            with self._connections.lease(False, actions_allowed=False) as transport:
+                transport.request("thread/archive", {"threadId": session})
+        except AgentSessionNotFound:
+            self._forget_session(session)
+            raise
+        self._forget_session(session)
+
+    def _forget_session(self, session):
+        self._private_sessions.discard(session)
         if session == self._context_session:
             self._context_usage = None
             self._context_session = None

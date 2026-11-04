@@ -212,13 +212,7 @@ class AskAiApp(App[None]):
     async def on_unmount(self) -> None:
         import asyncio
 
-        from askai.core.processors.taius import taius
-
-        try:
-            if self.return_code == 0:
-                await asyncio.to_thread(taius.compact_on_exit)
-        finally:
-            await asyncio.to_thread(shared.close)
+        await asyncio.to_thread(shared.close)
 
     async def action_back(self) -> None:
         """Navigate backwards."""

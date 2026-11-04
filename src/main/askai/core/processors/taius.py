@@ -11,7 +11,6 @@ class TaiusProcessor:
 
     def __init__(self):
         self._orchestrator = None
-        self._exit_compaction_done = False
         self.emit = lambda event: None
         self.interact = self._missing_interaction
 
@@ -34,7 +33,11 @@ class TaiusProcessor:
         if not configs.is_keep_context and self._orchestrator is None:
             return
         if self._orchestrator:
-            self._orchestrator.reset_session(Path.cwd())
+            try:
+                self._orchestrator.reset_session(Path.cwd(), self.emit)
+            finally:
+                from askai.core.agents.contracts import AgentEvent
+                self.emit(AgentEvent('finished', ''))
         else:
             from datetime import date
             from askai.core.askai_configs import configs
@@ -44,11 +47,16 @@ class TaiusProcessor:
             from askai.core.support.shared_instances import shared
             from askai.core.orchestration.session_reset import reset_saved_session
 
-            reset_saved_session(
-                shared.engine.backend,
-                PersistentMemory(Path(ASKAI_DIR) / "memory" / "history.sqlite3"),
-                configs.agent, str(Path.cwd().resolve()), date.today().isoformat()
-            )
+            try:
+                reset_saved_session(
+                    shared.engine.backend,
+                    PersistentMemory(Path(ASKAI_DIR) / "memory" / "history.sqlite3"),
+                    configs.agent, str(Path.cwd().resolve()), date.today().isoformat(),
+                    emit=self.emit, model=shared.engine.model,
+                )
+            finally:
+                from askai.core.agents.contracts import AgentEvent
+                self.emit(AgentEvent('finished', ''))
 
     def compact_session(self, *, wait=False):
         from askai.core.askai_configs import configs
@@ -73,24 +81,6 @@ class TaiusProcessor:
             )
         finally:
             self.emit(AgentEvent("finished", ""))
-
-    def compact_on_exit(self):
-        from askai.core.askai_configs import configs
-        from askai.core.askai_events import events
-        from askai.core.model.ai_reply import AIReply
-        from askai.core.askai_messages import msg
-        import logging
-
-        if self._exit_compaction_done or not configs.is_keep_context or not configs.compact_on_exit or self._orchestrator is None:
-            return
-        self._exit_compaction_done = True
-        if self._orchestrator.cancelled.is_set():
-            return
-        try:
-            self.compact_session(wait=True)
-        except Exception as error:
-            logging.warning("Session compaction on exit failed: %s", error)
-            events.reply.emit(reply=AIReply.error(msg.t("Session compaction could not be confirmed. Your history was preserved.")))
 
     def process(self, question: str, **kwargs):
         from askai.core.askai_prompt import prompt

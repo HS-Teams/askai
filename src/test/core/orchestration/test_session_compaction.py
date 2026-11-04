@@ -3,13 +3,75 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock
-from askai.core.agents.contracts import AgentError, AgentResult
+from askai.core.agents.contracts import AgentError, AgentResult, AgentSessionNotFound
 from askai.core.orchestration.orchestrator import Orchestrator
 from askai.core.support.persistent_memory import PersistentMemory
 from askai.core.support.short_term_memory import ShortTermMemory
 
 
 class SessionCompactionTests(unittest.TestCase):
+    def test_missing_previous_session_does_not_block_new_day_or_erase_history(self):
+        self.service._today = lambda: date(2026, 11, 3)
+        self.request()
+        history = self.durable.conversations('codex', str(self.cwd))
+        self.backend.compact.side_effect = AgentSessionNotFound('rollout removed')
+        self.backend.run.return_value = AgentResult('new', 't2', 'Next answer', 'completed')
+        self.service._today = lambda: date(2026, 11, 4)
+
+        self.request()
+
+        self.assertIsNone(self.backend.run.call_args.args[0].session_id)
+        self.assertIsNone(self.durable.session('codex', str(self.cwd), '2026-11-03'))
+        self.assertEqual(self.durable.session('codex', str(self.cwd), '2026-11-04'), 'new')
+        self.assertNotIn((str(self.cwd), '2026-11-03'), self.service._sessions)
+        self.assertEqual(self.durable.conversations('codex', str(self.cwd))[:len(history)], history)
+        self.request()
+        self.backend.compact.assert_called_once()
+
+    def test_daily_rotation_compacts_previous_session_before_new_execution(self):
+        self.service._today = lambda: date(2026, 11, 3)
+        self.request()
+        self.backend.reset_mock()
+        self.backend.run.return_value = AgentResult('new', 't', 'Answer', 'completed')
+        self.service._today = lambda: date(2026, 11, 4)
+        self.request()
+        calls = [call[0] for call in self.backend.mock_calls if call[0] in {'compact', 'run'}]
+        self.assertEqual(calls, ['compact', 'run'])
+        self.backend.compact.assert_called_once_with('s', self.cwd, None)
+        self.assertIsNone(self.backend.run.call_args.args[0].session_id)
+        self.assertEqual(self.durable.session('codex', str(self.cwd), '2026-11-03'), 's')
+        self.request()
+        self.assertEqual(self.backend.compact.call_count, 1)
+
+    def test_restart_on_new_day_compacts_saved_session_without_using_another_scope(self):
+        self.service._today = lambda: date(2026, 11, 3)
+        self.request()
+        self.durable.record('other', str(self.cwd), 'other', 'completed', {}, 'unrelated',
+                            session_date='2026-11-03')
+        restarted = Orchestrator(self.backend, ShortTermMemory(4), lambda q: '', Mock(),
+                                 lambda q, a, r: a, durable=PersistentMemory(self.durable.path),
+                                 today=lambda: date(2026, 11, 4))
+        restarted.process('Next', self.cwd, '', Mock(), Mock())
+        self.backend.compact.assert_called_once_with('s', self.cwd, None)
+
+    def test_rotation_failure_preserves_previous_session_and_does_not_start_new_turn(self):
+        self.service._today = lambda: date(2026, 11, 3)
+        self.request()
+        self.backend.compact.side_effect = AgentError('offline')
+        self.service._today = lambda: date(2026, 11, 4)
+        with self.assertRaisesRegex(AgentError, 'offline'):
+            self.request()
+        self.assertEqual(self.backend.run.call_count, 1)
+        self.assertEqual(self.durable.session('codex', str(self.cwd), '2026-11-03'), 's')
+        self.assertIsNone(self.durable.session('codex', str(self.cwd), '2026-11-04'))
+
+    def test_manual_compaction_is_not_repeated_before_reset_without_new_activity(self):
+        self.request()
+        self.service.compact_session(self.cwd, Mock())
+        self.service.reset_session(self.cwd)
+        self.backend.compact.assert_called_once()
+        self.backend.archive.assert_called_once_with('s')
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -66,4 +128,4 @@ class SessionCompactionTests(unittest.TestCase):
                 self.service.compact_session(self.cwd, Mock())
         finally:
             self.service._active.release()
-        self.backend.compact.assert_not_called()
+        self.backend.compact.assert_called_once_with('s', self.cwd, None)

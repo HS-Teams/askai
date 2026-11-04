@@ -47,10 +47,6 @@ class AskAiConfigs(metaclass=Singleton):
         return os.getenv("ASKAI_TTS_ENGINE") or settings.get("askai.speech.tts.engine") or "ElevenLabs"
 
     @property
-    def compact_on_exit(self) -> bool:
-        return settings.get_bool("askai.session.compact.on.exit", True)
-
-    @property
     def agent(self) -> str:
         return settings.get("askai.agent.default").strip() or "codex"
 

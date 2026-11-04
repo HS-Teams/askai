@@ -75,7 +75,16 @@ class StdioTransport:
                 continue
             if message.get("id") == request_id and "method" not in message:
                 if "error" in message:
-                    raise AgentError(f"Codex {method}: {message['error']}")
+                    from askai.core.agents.contracts import AgentSessionNotFound
+
+                    error = message['error']
+                    session = params.get('threadId')
+                    if (method in {'thread/resume', 'thread/archive', 'thread/compact/start'}
+                            and session and isinstance(error, dict)
+                            and error.get('code') == -32600
+                            and error.get('message') == f'no rollout found for thread id {session}'):
+                        raise AgentSessionNotFound(f'Codex {method}: {error}')
+                    raise AgentError(f"Codex {method}: {error}")
                 if not isinstance(message.get("result"), dict):
                     raise AgentError(f"Invalid Codex response to {method}")
                 return message["result"]

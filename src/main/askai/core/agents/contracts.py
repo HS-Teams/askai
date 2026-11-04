@@ -10,6 +10,10 @@ class AgentError(RuntimeError):
     """A runtime, protocol or delegated execution failure."""
 
 
+class AgentSessionNotFound(AgentError):
+    """The runtime explicitly reported that the requested session no longer exists."""
+
+
 @dataclass(frozen=True)
 class AgentTask:
     instruction: str

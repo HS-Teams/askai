@@ -69,7 +69,7 @@ The listing distinguishes final answers, failed requests and unfinished requests
 New records retain their actual session ID even after a reset on the same date.
 Older records lacking session/date metadata are shown as not recorded in the
 unfiltered listing; their association is not guessed. Disabling History preserves
-previously saved data. Automatic exit compaction is skipped while History is OFF.
+previously saved data. Automatic compaction is skipped while History is OFF.
 
 ## Compact the native session
 
@@ -78,28 +78,36 @@ retains the session ID and leaves the AskAI SQLite journal and STM unchanged.
 The runtime owns the summary and persistence; AskAI does not rewrite its session
 files or substitute a new thread.
 
-`askai.session.compact.on.exit` defaults to `true`, including existing installs
-where this setting was absent. Change it with:
+Automatic compaction runs before replacing a saved session: `/session reset`
+compacts the current session before archiving it and removing its resume pointer.
+Before creating a session for a new day, AskAI compacts the most recent earlier
+daily session for the same agent and working directory, including after restart.
+Resuming an existing session does not trigger compaction. If compaction fails,
+the replacement is blocked and the previous session remains available.
+If Codex explicitly reports that the session's rollout no longer exists,
+`/session reset` records that loss and retires the stale local pointer instead.
+The next request creates a new session with fresh AskAI tool instructions. The
+local journal, STM and preferences are preserved; unavailable native context
+cannot be reconstructed from the missing rollout. Other errors still block reset.
 
-```text
-/settings set askai.session.compact.on.exit false
-```
+Exiting CLI or TUI no longer compacts the session. The old
+`askai.session.compact.on.exit` setting is no longer read or created; existing
+saved values have no effect. Manual `/session compact` remains available.
 
-On normal exit, AskAI waits up to 30 seconds for its current task to release the
-session before attempting compaction. It waits for a completed `contextCompaction`
+AskAI waits for a completed `contextCompaction`
 item and a successful terminal turn notification; the immediate `{}` response to
 `thread/compact/start` is not success. Event completion has a 60-second deadline,
 in addition to the existing bounded transport request waits.
 
 Only sessions with observed agent activity newer than their last confirmed
-compaction are compacted. The revision marker survives restarts. A reset does not
-compact or revive the retired session. Exiting without using a session does not
-start a new agent session just to compact it. Normal shutdown runs this hook once
-across CLI/TUI cleanup paths.
+compaction are compacted. The revision marker survives restarts, so a manually
+compacted session is not compacted again before replacement unless new activity
+was recorded. The first session has no previous session to compact.
 
-Interrupted tasks and forced exits skip automatic compaction. A failure or timeout
-is reported, leaves the revision eligible for a later attempt, and does not prevent
-cleanup or erase history. No compaction runs from a process-exit signal handler.
+A failure or timeout is reported and leaves the revision eligible for a later
+attempt without erasing history. No compaction runs during shutdown or from a
+process-exit signal handler. The previous session's compacted context is not
+automatically copied into its replacement.
 
 A live native-compaction check on 2026-10-31 confirmed completion, resumed the
 same session ID, and recovered the exact test token after compaction.

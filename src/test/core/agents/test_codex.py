@@ -4,10 +4,31 @@ from threading import Event
 from unittest.mock import Mock, patch
 
 from askai.core.agents.codex import CodexBackend
-from askai.core.agents.contracts import AgentTask, AgentError
+from askai.core.agents.contracts import AgentTask, AgentError, AgentSessionNotFound
 
 
 class CodexTests(unittest.TestCase):
+    def test_missing_session_clears_stale_context_usage_before_recovery(self):
+        for operation in ('compact', 'archive'):
+            with self.subTest(operation=operation):
+                transport = self.transport([])
+                request = transport.request.side_effect
+                def missing(method, params):
+                    if method in {'thread/resume', 'thread/archive'}:
+                        raise AgentSessionNotFound('no rollout found')
+                    return request(method, params)
+                transport.request.side_effect = missing
+                backend = CodexBackend(transport_factory=lambda _: transport)
+                backend._context_session = 'lost'
+                backend._context_usage = {'used': 10, 'limit': 100}
+                with self.assertRaises(AgentSessionNotFound):
+                    if operation == 'compact':
+                        backend.compact('lost', Path.cwd())
+                    else:
+                        backend.archive('lost')
+                self.assertIsNone(backend.context_usage())
+                self.assertIsNone(backend._context_session)
+
     def test_computer_tool_title_is_forwarded_as_progress(self):
         transport = self.transport([
             {'method': 'item/started', 'params': {'item': {'type': 'mcpToolCall',

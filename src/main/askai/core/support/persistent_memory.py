@@ -42,6 +42,13 @@ class PersistentMemory:
             ).fetchone()
         return row[0] if row else None
 
+    def previous_session(self, agent: str, cwd: str, day: str) -> tuple[str, str] | None:
+        with closing(self._connect()) as db:
+            return db.execute(
+                'SELECT day,session FROM daily_sessions WHERE agent=? AND cwd=? AND day<? '
+                'ORDER BY day DESC LIMIT 1', (agent, cwd, day),
+            ).fetchone()
+
     def reset_session(self, agent: str, cwd: str, day: str) -> None:
         """Retire today's pointer while retaining the old session ID in the journal."""
         with closing(self._connect()) as db, db:
