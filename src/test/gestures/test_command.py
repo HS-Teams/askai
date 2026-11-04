@@ -15,6 +15,7 @@ class GestureCommandTests(unittest.TestCase):
         self.formatter = Mock()
         self.formatter.render_command.side_effect = lambda text: self.order.append(('print', text))
         self.events = Mock()
+        self.speech, self.processor = Mock(), Mock()
 
         @contextmanager
         def loading(*_):
@@ -28,13 +29,17 @@ class GestureCommandTests(unittest.TestCase):
             'askai.core.askai_configs': NS(configs=NS(is_sfx_muted=False)),
             'askai.core.permissions.grants': NS(grants=Mock()),
             'askai.core.processors.taius': NS(taius=Mock()),
+            'askai.core.support.shared_instances': NS(
+                shared=NS(speech=self.speech, mode=NS(processor=self.processor))),
+            'askai.core.askai_settings': None,
             'askai.core.support.app_paths': NS(askai_data_dir=Mock(return_value='/tmp/gestures')),
             'askai.core.askai_messages': NS(msg=NS(t=lambda text: 'Translated: ' + text)),
             'askai.core.askai_events': NS(events=self.events),
             'askai.core.model.ai_reply': NS(AIReply=AIReply),
             'askai.cli.gestures_loading': NS(gestures_loading=loading),
         }
-        output = patch('askai.cli.output', self.formatter)
+        output = patch.multiple('askai.cli.output', console=self.formatter.console,
+                                render_command=self.formatter.render_command)
         output.start()
         self.addCleanup(output.stop)
         dependencies = patch.dict('sys.modules', modules)
@@ -78,8 +83,12 @@ class GestureCommandTests(unittest.TestCase):
         notify('voice')
         self.events.voice_input.emit.assert_called_once_with()
         self.events.reply.emit.assert_not_called()
+        self.speech.cancel_output.assert_called_once_with()
+        self.processor.cancel.assert_called_once_with()
+        self.events.abort.emit.assert_called_once_with(message='User interrupted [Heavy Metal]')
         self.assertEqual([call.args[0] for call in self.sound.call_args_list],
-                         ['gesture-init.mp3', 'gesture-quit.mp3', 'gesture-ptt.mp3'])
+                         ['gesture-init.mp3', 'gesture-slide-up.mp3', 'gesture-slide-down.mp3',
+                          'gesture-stop.mp3', 'gesture-quit.mp3', 'gesture-ptt.mp3'])
 
     def test_cancelled_authorization_does_not_start_or_print_success(self):
         with patch.object(command, 'authorize', return_value=False), patch.object(command, 'launch') as launch:

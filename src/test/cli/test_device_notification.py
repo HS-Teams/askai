@@ -22,7 +22,7 @@ class DeviceNotificationTests(unittest.TestCase):
                 module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
                 exec(compile(module, str(path), 'exec'), scope)
                 pending = []
-                with patch('askai.cli.output', formatter), patch.dict('sys.modules', {
+                with patch('askai.cli.output.console', formatter.console), patch.dict('sys.modules', {
                     'askai.cli.prompt_input': SimpleNamespace(present_notice=lambda console, notice: pending.append(lambda: console.print(notice))),
                 }):
                     scope[method.name](view, SimpleNamespace(args=SimpleNamespace(device=(1, 'Microphone'))))

@@ -20,7 +20,7 @@ class ConfirmationTests(unittest.TestCase):
     def test_keyboard_accepts_uppercase_letter(self):
         from types import SimpleNamespace
         from askai.cli.confirmation import read_confirmation_key
-        with patch('askai.cli.output', SimpleNamespace(console=Mock())), patch.dict('sys.modules', {
+        with patch('askai.cli.output.console', Mock()), patch.dict('sys.modules', {
             'askai.core.askai_prompt': SimpleNamespace(prompt=SimpleNamespace(user='Hjunior')),
         }), patch('hspylib.modules.cli.keyboard.Keyboard.wait_keystroke',
                   return_value=SimpleNamespace(val='Y')):
@@ -31,7 +31,7 @@ class ConfirmationTests(unittest.TestCase):
         from types import SimpleNamespace
         from askai.cli.confirmation import read_confirmation_key
         console = Mock()
-        with patch('askai.cli.output', SimpleNamespace(console=console)), patch.dict('sys.modules', {
+        with patch('askai.cli.output.console', console), patch.dict('sys.modules', {
             'askai.core.askai_prompt': SimpleNamespace(prompt=SimpleNamespace(user='Hjunior')),
         }), patch('hspylib.modules.cli.keyboard.Keyboard.wait_keystroke',
                   side_effect=[SimpleNamespace(val=k) for k in ('x', '3', '1')]):

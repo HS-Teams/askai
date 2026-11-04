@@ -23,7 +23,7 @@ class InitialCommentaryTests(unittest.TestCase):
                     view._agent_progress.present.side_effect = lambda render: render()
                     view.call_from_thread.side_effect = lambda fn, *args: fn(*args)
                     formatter = SimpleNamespace(console=Mock())
-                    with patch('askai.cli.output', formatter), \
+                    with patch('askai.cli.output.console', formatter.console), \
                          patch('askai.cli.answer_renderer.render_answer') as render:
                         scope['_agent_event'](view, SimpleNamespace(kind='initial_commentary', data={'text': 'Vou consultar.'}))
                         if filename.startswith('core'):

@@ -26,7 +26,7 @@ class SystemReplyTests(unittest.TestCase):
             scope = dict(AIReply=AIReply, msg=Mock(t=lambda text: 'Sistema', translate=lambda text: text))
             exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), scope)
             event = SimpleNamespace(args=SimpleNamespace(reply=AIReply.system('Stopped.')))
-            with patch('askai.cli.output', formatter):
+            with patch('askai.cli.output.console', formatter.console):
                 scope[method](view, event)
             view._reply.assert_not_called()
             view._reply_error.assert_not_called()
@@ -74,7 +74,7 @@ class SystemReplyTests(unittest.TestCase):
         view._display_reply_event = MethodType(scope['_display_reply_event'], view)
         formatter = Mock()
         event = SimpleNamespace(args=SimpleNamespace(reply=AIReply.system('Ajuste a posição.')))
-        with patch.object(prompt_input, '_active', None), patch('askai.cli.output', formatter):
+        with patch.object(prompt_input, '_active', None), patch('askai.cli.output.console', formatter.console):
             scope['_cb_reply_event'](view, event)
             formatter.console.print.assert_not_called()
             self.assertEqual(editor.messages.qsize(), 1)
