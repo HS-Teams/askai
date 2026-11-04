@@ -42,9 +42,11 @@ from hspylib.modules.eventbus.event import Event
 from pathlib import Path
 from textual import on, work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import ScrollableContainer
 from textual.widgets import Footer, Input, MarkdownViewer
 from typing import Optional
+from threading import Event as ThreadEvent
 
 import logging as log
 import nltk
@@ -71,6 +73,7 @@ class AskAiApp(App[None]):
         ("a", "assistive", " Assistive"),
         ("ctrl+l", "ptt", " Push-to-Talk"),
         ("ctrl+s", "stop", " Stop-GenAi"),
+        Binding("escape", "cancel_capture", show=False, priority=True),
     ]
     # fmt: on
 
@@ -80,6 +83,8 @@ class AskAiApp(App[None]):
         self, speak: bool, debug: bool, cacheable: bool, tempo: int, engine_name: str, model_name: str, mode: RouterMode
     ):
         super().__init__()
+        self._capture_cancelled = ThreadEvent()
+        self._capture_listening = False
         self._askai: AskAi = AskAi(speak, debug, cacheable, tempo, engine_name, model_name, mode)
         self._re_render: bool = True
         self._display_buffer: list[str] = list()
@@ -227,20 +232,10 @@ class AskAiApp(App[None]):
         """Toggles display of the table of contents."""
         self.md_console.show_table_of_contents = not self.md_console.show_table_of_contents
 
-    def check_action(self, action: str, _) -> Optional[bool]:
-        """Check if a specific action can be performed.
-        :param action: The name of the action to check.
-        :param _: Unused parameter, typically a placeholder for additional context.
-        :return: True if the action can be performed, None if it cannot.
-        """
-        if action == "forward" and self.md_console.navigator.end:
-            # Disable footer link if we can't go forward
-            return None
-        if action == "back" and self.md_console.navigator.start:
-            # Disable footer link if we can't go backward
-            return None
-        # All other keys display as normal
-        return True
+    def check_action(self, action, parameters):
+        if action == 'cancel_capture':
+            return self._capture_listening
+        return super().check_action(action, parameters)
 
     @work(thread=True)
     def enable_controls(self, enable: bool = True) -> None:
@@ -294,14 +289,22 @@ class AskAiApp(App[None]):
         """Handle the Push-To-Talk (PTT) action for Speech-To-Text (STT) input. This method allows the user to use
         Push-To-Talk as an input method, converting spoken words into text.
         """
+        from askai.cli.dictation_input import capture_cancellation
+        self._capture_cancelled.clear()
         self.enable_controls(False)
-        if spoken_text := shared.listen():
-            self.display_text(f"{shared.username_md}: {spoken_text}")
-            if self.ask_and_reply(spoken_text):
-                self.suggester.add_suggestion(spoken_text)
-                suggestions = self.suggester.suggestions()
-                cache.save_input_history(suggestions)
-        self.enable_controls()
+        try:
+            with capture_cancellation(self._capture_cancelled.is_set):
+                if spoken_text := shared.listen():
+                    self.display_text(f"{shared.username_md}: {spoken_text}")
+                    if self.ask_and_reply(spoken_text):
+                        self.suggester.add_suggestion(spoken_text)
+                        suggestions = self.suggester.suggestions()
+                        cache.save_input_history(suggestions)
+        finally:
+            self.enable_controls()
+
+    def action_cancel_capture(self) -> None:
+        self._capture_cancelled.set()
 
     async def action_stop(self) -> None:
         """Stop generating response."""
@@ -471,6 +474,7 @@ class AskAiApp(App[None]):
         """Callback to handle microphone listening events.
         :param ev: The event object representing the microphone listening event.
         """
+        self._capture_listening = ev.args.listening
         self.header.notifications.listening = ev.args.listening
 
     def _cb_device_changed_event(self, ev: Event) -> None:
@@ -488,11 +492,14 @@ class AskAiApp(App[None]):
         :param question: The question to ask the AI engine.
         :return: A tuple containing a boolean indicating success or failure, and the AI's reply as an optional string.
         """
+        from askai.cli.dictation_input import capture_cancellation
+        self._capture_cancelled.clear()
         self.enable_controls(False)
-        status, reply = self.askai.ask_and_reply(question)
-        self.enable_controls()
-
-        return status, reply
+        try:
+            with capture_cancellation(self._capture_cancelled.is_set):
+                return self.askai.ask_and_reply(question)
+        finally:
+            self.enable_controls()
 
     def _startup(self) -> None:
         """Initialize the application components."""
