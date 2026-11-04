@@ -16,7 +16,7 @@ from askai.core.askai_messages import msg
 from askai.core.askai_prompt import prompt
 from askai.core.component.cache_service import cache
 from askai.core.engine.openai.temperature import Temperature
-from askai.core.support.text_formatter import text_formatter as tf
+from askai.cli import output as cli_output
 from askai.core.support.utilities import find_file
 from askai.exception.exceptions import TerminatingQuery
 from clitt.core.term.cursor import cursor
@@ -49,7 +49,7 @@ class NonInteractive(metaclass=Singleton):
         if question.casefold() in ["exit", "leave", "quit", "q"]:
             return None
 
-        with Live(Spinner("dots", f"[green]{msg.wait()}[/green]", style="green"), console=tf.console):
+        with Live(Spinner("dots", f"[green]{msg.wait()}[/green]", style="green"), console=cli_output.console):
             output = None
             query_prompt: str | None = find_file(kwargs["query_prompt"]) if "query_prompt" in kwargs else None
             context: str | None = kwargs["context"] if "context" in kwargs else None

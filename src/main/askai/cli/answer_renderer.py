@@ -22,8 +22,9 @@ ANSWER_THEME = Theme(
 )
 
 
-def render_answer(console, markdown: str, label: str = "Taius") -> None:
-    console.print(Text(f"{label}: ", style="green"), end="")
+def render_answer(console, markdown: str, label: str | None = "Taius") -> None:
+    if label:
+        console.print(Text(f"{label}: ", style="green"), end="")
     with console.use_theme(ANSWER_THEME):
         console.print(Markdown(markdown.lstrip("\r\n"), code_theme="monokai"))
     console.print()

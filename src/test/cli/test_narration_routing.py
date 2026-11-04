@@ -24,8 +24,8 @@ class NarrationRoutingTests(unittest.TestCase):
                                             is_final=True, is_speakable=True)
                     view = Mock(mode=SimpleNamespace(icon='AI'))
                     view._display_buffer = []
-                    formatter = SimpleNamespace(text_formatter=SimpleNamespace(console=Mock()))
-                    with patch.dict('sys.modules', {'askai.core.support.text_formatter': formatter}), \
+                    formatter = SimpleNamespace(console=Mock())
+                    with patch('askai.cli.output', formatter), \
                          patch('askai.cli.answer_renderer.render_answer') as render:
                         scope['_reply'](view, reply)
                         if speak:

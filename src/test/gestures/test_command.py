@@ -13,7 +13,7 @@ class GestureCommandTests(unittest.TestCase):
         self.addCleanup(sound.stop)
         self.order = []
         self.formatter = Mock()
-        self.formatter.commander_print.side_effect = lambda text: self.order.append(('print', text))
+        self.formatter.render_command.side_effect = lambda text: self.order.append(('print', text))
         self.events = Mock()
 
         @contextmanager
@@ -25,15 +25,18 @@ class GestureCommandTests(unittest.TestCase):
                 self.order.append('closed')
 
         modules = {
+            'askai.core.askai_configs': NS(configs=NS(is_sfx_muted=False)),
             'askai.core.permissions.grants': NS(grants=Mock()),
             'askai.core.processors.taius': NS(taius=Mock()),
             'askai.core.support.app_paths': NS(askai_data_dir=Mock(return_value='/tmp/gestures')),
             'askai.core.askai_messages': NS(msg=NS(t=lambda text: 'Translated: ' + text)),
             'askai.core.askai_events': NS(events=self.events),
             'askai.core.model.ai_reply': NS(AIReply=AIReply),
-            'askai.core.support.text_formatter': NS(text_formatter=self.formatter),
             'askai.cli.gestures_loading': NS(gestures_loading=loading),
         }
+        output = patch('askai.cli.output', self.formatter)
+        output.start()
+        self.addCleanup(output.stop)
         dependencies = patch.dict('sys.modules', modules)
         dependencies.start()
         self.addCleanup(dependencies.stop)
@@ -44,7 +47,7 @@ class GestureCommandTests(unittest.TestCase):
                 command, 'launch', return_value=result):
             self.assertEqual(command.start(1), result)
         message = 'Translated: Gesture control started.'
-        self.formatter.commander_print.assert_called_once_with(message)
+        self.formatter.render_command.assert_called_once_with(message)
         self.assertEqual(self.order, ['loading', 'closed', ('print', message)])
         self.events.reply.emit.assert_not_called()
         self.sound.assert_called_once_with('gesture-init.mp3')
@@ -55,7 +58,7 @@ class GestureCommandTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Camera unavailable'):
                 command.start()
         self.assertEqual(self.order, ['loading', 'closed'])
-        self.formatter.commander_print.assert_not_called()
+        self.formatter.render_command.assert_not_called()
         self.sound.assert_not_called()
 
     def test_worker_notices_are_system_messages_and_voice_keeps_its_action(self):
@@ -82,5 +85,5 @@ class GestureCommandTests(unittest.TestCase):
         with patch.object(command, 'authorize', return_value=False), patch.object(command, 'launch') as launch:
             self.assertEqual(command.start(), {'status': 'cancelled'})
         launch.assert_not_called()
-        self.formatter.commander_print.assert_not_called()
+        self.formatter.render_command.assert_not_called()
         self.sound.assert_not_called()

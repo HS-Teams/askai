@@ -23,7 +23,7 @@ from askai.core.askai_configs import configs
 from askai.core.askai_settings import settings
 from askai.core.component.multimedia.recorder import InputDevice, recorder
 from askai.core.support.shared_instances import shared
-from askai.core.support.text_formatter import text_formatter
+from askai.cli import output as cli_output
 from askai.core.support.utilities import copy_file
 
 
@@ -37,7 +37,7 @@ class TtsSttCmd(ABC):
         refresh = getattr(speech, "refresh_voices", speech.voices)
         catalogue = [{'index': index, 'name': voice} for index, voice in enumerate(refresh())]
         voices = "\n".join(f"{voice['index']}. {voice['name']}" for voice in catalogue)
-        text_formatter.commander_print(
+        cli_output.render_command(
             f"Available `{speech.model_name}` voices:\n{voices}\n"
             f"Current voice: `{speech.voice}`\n"
             '> Use `/voices set "voice name"` or `/voices play <number|voice_name>`.'
@@ -49,7 +49,7 @@ class TtsSttCmd(ABC):
         speech = shared.speech.tts
         if voice := TtsSttCmd._resolve_voice(name_or_index):
             speech.select_voice(voice)
-            text_formatter.commander_print(f"Voice changed to `{voice}`")
+            cli_output.render_command(f"Voice changed to `{voice}`")
             return {'selected_voice': speech.voice, 'requested_voice': voice}
         return {'status': 'failed', 'error': f'Invalid voice name/index: {name_or_index}'}
 
@@ -80,7 +80,7 @@ class TtsSttCmd(ABC):
             for voice in voices:
                 if voice.casefold() == value.casefold():
                     return voice
-        text_formatter.commander_print(f"%RED%Invalid voice name/index: '{value}'%NC%")
+        cli_output.render_command(f"Invalid voice name/index: '{value}'")
         return None
 
     @staticmethod
@@ -94,16 +94,16 @@ class TtsSttCmd(ABC):
             settings.put("askai.text.to.speech.tempo", speed)
             configs.tempo = speed
             tempo_str: str = "Normal" if speed == 1 else ("Fast" if speed == 2 else "Ultra")
-            text_formatter.commander_print(f"`Speech-To-Text` **tempo** changed to %GREEN%{tempo_str} ({speed})%NC%")
+            cli_output.render_command(f"`Speech-To-Text` **tempo** changed to {tempo_str} ({speed})")
         else:
-            text_formatter.commander_print(f"%RED%Invalid tempo value: '{speed}'. Please choose between [1..3].%NC%")
+            cli_output.render_command(f"Invalid tempo value: '{speed}'. Please choose between [1..3].")
 
     @staticmethod
     def device_list() -> None:
         """List the available audio input devices."""
         all_devices = recorder.devices
         str_devices = "\n".join([f"{d[0]}. {d[1]}" for d in all_devices])
-        text_formatter.commander_print(
+        cli_output.render_command(
             f"Current audio input device: {recorder.input_device} \n"
             f"\nAvailable audio input devices: \n"
             f"\n{str_devices}\n> Hint: Type: '/devices set \\<number\\>' to select a device."
@@ -120,9 +120,9 @@ class TtsSttCmd(ABC):
 
         def _set_device(_device) -> bool:
             if recorder.set_device(_device):
-                text_formatter.commander_print(f"`Text-To-Speech` device changed to %GREEN%{_device}%NC%")
+                cli_output.render_command(f"`Text-To-Speech` device changed to {_device}")
                 return True
-            text_formatter.commander_print(f"%HOM%%ED2%Error: '{_device}' is not an Audio Input device!%NC%")
+            cli_output.render_command(f"Error: '{_device}' is not an Audio Input device!")
             all_devices.remove(_device)
             pause.seconds(2)
             return False
@@ -133,7 +133,7 @@ class TtsSttCmd(ABC):
             name_or_index = all_devices[int(name_or_index)][1]
             device = next((dev for dev in all_devices if dev[1] == name_or_index), None)
         if not (device and _set_device(device)):
-            text_formatter.commander_print(f"%RED%Invalid audio input device: '{name_or_index}'%NC%")
+            cli_output.render_command(f"Invalid audio input device: '{name_or_index}'")
 
     @staticmethod
     def tts(text: str, dest_dir: str = os.getcwd(), playback: bool = True) -> None:
@@ -145,9 +145,9 @@ class TtsSttCmd(ABC):
         if (audio_path := shared.speech.tts.synthesize(text, stream=False, playback=playback)) and audio_path.exists():
             if dest_dir and ((dest_path := Path(dest_dir)) and dest_path.exists()):
                 audio_path = copy_file(audio_path, dest_dir)
-            text_formatter.commander_print(f"File %GREEN%'{audio_path}' was successfully saved!%NC%")
+            cli_output.render_command(f"File '{audio_path}' was successfully saved!")
         else:
-            text_formatter.commander_print(f"%RED%Unable to convert text to file !%NC%")
+            cli_output.render_command(f"Unable to convert text to file !")
 
     @staticmethod
     def dictate(dest_file: str | None) -> None:
@@ -172,8 +172,8 @@ class TtsSttCmd(ABC):
         instruction = msg.t("Dictating. Press Esc or pause for more than 3 seconds to finish and save.")
 
         def ready():
-            text_formatter.commander_print(instruction)
-            text_formatter.console.file.flush()
+            cli_output.render_command(instruction)
+            cli_output.console.file.flush()
 
         from askai.core.component.multimedia.audio_player import player
         with pause_for_ptt():
@@ -187,10 +187,10 @@ class TtsSttCmd(ABC):
                 on_captured=lambda: player.play_sfx('ui/dictate-end'),
             )
         if not original:
-            text_formatter.commander_print(msg.t("Dictation produced no text!"))
+            cli_output.render_command(msg.t("Dictation produced no text!"))
             return
         source = dictation.save_original(destination, original)
-        text_formatter.commander_print(msg.t("Original dictation saved:") + f" `{source}`")
+        cli_output.render_command(msg.t("Original dictation saved:") + f" `{source}`")
         refined = dictation.refine(original, prompt.read_prompt("dictation-refiner.txt"), complete)
         dictation.save_refined(destination, refined)
         pyperclip.copy(refined)
@@ -200,7 +200,7 @@ class TtsSttCmd(ABC):
         durable = (PersistentMemory(askai_data_dir() / "memory" / "history.sqlite3")
                    if configs.is_keep_context else None)
         register(shared.memory, durable, configs.agent, Path.cwd(), source, destination, refined)
-        text_formatter.commander_print(msg.t("Refined dictation saved and copied to the clipboard:") + f" `{destination}`")
+        cli_output.render_command(msg.t("Refined dictation saved and copied to the clipboard:") + f" `{destination}`")
         from askai.core.askai_events import events
         from askai.core.model.ai_reply import AIReply
         events.reply.emit(reply=AIReply.final(f"<TTS>{refined}</TTS>"))

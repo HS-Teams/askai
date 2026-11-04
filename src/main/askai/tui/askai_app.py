@@ -28,7 +28,6 @@ from askai.core.engine.ai_engine import AIEngine
 from askai.core.enums.router_mode import RouterMode
 from askai.core.model.ai_reply import AIReply
 from askai.core.support.shared_instances import shared
-from askai.core.support.text_formatter import text_formatter
 from askai.tui.app_header import Header
 from askai.tui.app_icons import AppIcons
 from askai.tui.app_suggester import InputSuggester
@@ -333,7 +332,7 @@ class AskAiApp(App[None]):
                     if (text := self._display_buffer.pop(0)) == prev_text:
                         continue
                     prev_text = text
-                    final_text: str = text_formatter.beautify(f"{ensure_endswith(text, os.linesep * 2)}")
+                    final_text: str = ensure_endswith(text, os.linesep * 2)
                     f_console.write(final_text)
                     f_console.flush()
                 self._re_render = True

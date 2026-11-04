@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 from types import ModuleType, SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from hspylib.core.metaclass.singleton import Singleton
 
@@ -12,13 +12,12 @@ from hspylib.core.metaclass.singleton import Singleton
 class TestRefinerPromptLoading(unittest.TestCase):
     def test_action_loads_nested_prompt_before_invoking_refiner(self):
         resources = Path(__file__).parents[3] / 'main/askai/resources'
-        formatter = Mock()
-        formatter.strip_format.side_effect = lambda value: value
-        formatter.escape_markdown.side_effect = lambda value: value
         services = {
             'askai.__classpath__': {'classpath': SimpleNamespace(resource_path=resources)},
+            'askai.core.askai_configs': {'configs': SimpleNamespace()},
         }
-        modules = {}
+        # Loading a prompt must not initialize application settings or their database.
+        modules = {'askai.core.askai_settings': None, 'setman': None}
         for name, attributes in services.items():
             modules[name] = ModuleType(name)
             modules[name].__dict__.update(attributes)

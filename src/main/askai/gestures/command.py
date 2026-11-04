@@ -67,11 +67,11 @@ def start(camera_index=0):
         events.reply.emit(reply=AIReply.system(message))
 
     from askai.cli.gestures_loading import gestures_loading
-    from askai.core.support.text_formatter import text_formatter
+    from askai.cli import output as cli_output
 
-    with gestures_loading(text_formatter.console, msg.t) as update:
+    with gestures_loading(cli_output.console, msg.t) as update:
         result = launch(camera_index, askai_data_dir(), labels, notify,
                         wait_ready=True, on_progress=update, sfx_muted=configs.is_sfx_muted)
     play_init()
-    text_formatter.commander_print(msg.t(MESSAGES['started']))
+    cli_output.render_command(msg.t(MESSAGES['started']))
     return result

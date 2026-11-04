@@ -13,8 +13,6 @@
 Copyright (c) 2024, AskAI
 """
 
-from askai.core.support.text_formatter import text_formatter
-from clitt.core.term.cursor import cursor
 from hspylib.core.config.path_object import PathObject
 from hspylib.core.enums.charset import Charset
 from hspylib.core.metaclass.classpath import AnyPath
@@ -24,7 +22,7 @@ from hspylib.core.tools.text_tools import ensure_endswith, strip_escapes
 from hspylib.core.zoned_datetime import now_ms
 from os.path import basename, dirname
 from pathlib import Path
-from typing import AnyStr, Optional, TypeAlias
+from typing import Optional, TypeAlias
 
 import base64
 import mimetypes
@@ -44,21 +42,6 @@ def read_stdin() -> Optional[str]:
     if not sys.stdin.isatty():
         return sys.stdin.read()
     return None
-
-
-def display_text(text: AnyStr, prefix: AnyStr = "", markdown: bool = True, erase_last=False) -> None:
-    """Display the provided text in a formatted way.
-    :param text: The text to be displayed.
-    :param prefix: A prefix to prepend to the text (optional).
-    :param markdown: Whether to render the text using markdown formatting (default is True).
-    :param erase_last: Whether to erase the last displayed line before displaying the new text (default is False).
-    """
-    if erase_last:
-        cursor.erase_line()
-    if markdown:
-        text_formatter.display_markdown(f"{str(prefix)}{text}")
-    else:
-        text_formatter.display_text(f"{str(prefix)}{text}")
 
 
 def find_file(filename: AnyPath) -> Optional[Path]:

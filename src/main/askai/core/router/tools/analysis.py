@@ -15,7 +15,7 @@
 from askai.core.askai_prompt import prompt
 from askai.core.engine.openai.temperature import Temperature
 from askai.core.support.shared_instances import shared
-from askai.core.support.text_formatter import TextFormatter
+from askai.core.support.markdown_text import ensure_ln
 
 
 
@@ -28,4 +28,4 @@ def query_output(query: str, context: str = None) -> str:
     output = shared.engine.complete([
         {"role": "system", "content": prompt.read_prompt("analysis")},
         {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}], Temperature.DATA_ANALYSIS.temp)
-    return TextFormatter.ensure_ln(output)
+    return ensure_ln(output)

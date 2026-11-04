@@ -8,7 +8,7 @@ class UsageCmd:
         from askai.core.askai_messages import msg
         from askai.core.askai_configs import configs
         from askai.core.support.shared_instances import shared
-        from askai.core.support.text_formatter import text_formatter
+        from askai.cli import output as cli_output
         from rich.table import Table
 
         rows = engine_usage(configs.agent, shared.engine)
@@ -23,4 +23,4 @@ class UsageCmd:
                 table.add_row(row.provider, msg.t('Unavailable'), msg.t(row.error), '-')
             else:
                 table.add_row(row.provider, row.remaining, msg.t(row.window), reset_time(row.resets_at))
-        text_formatter.console.print(table)
+        cli_output.console.print(table)

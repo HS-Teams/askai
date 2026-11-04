@@ -14,7 +14,7 @@ class DictationReplyTests(unittest.TestCase):
                     if isinstance(n, ast.FunctionDef) and n.name == 'dictate')
         node.decorator_list = []
         recorder, clipboard, complete = Mock(), Mock(), Mock(side_effect=ValueError('Refinement failed'))
-        scope = dict(__file__=str(path), Path=Path, recorder=recorder, text_formatter=Mock())
+        scope = dict(__file__=str(path), Path=Path, recorder=recorder, cli_output=Mock())
         exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), scope)
         modules = {
             'pyperclip': clipboard,
@@ -58,7 +58,7 @@ class DictationReplyTests(unittest.TestCase):
         node.decorator_list = []
         order = []
         formatter = Mock()
-        formatter.commander_print.side_effect = lambda text: order.append(('notice', text))
+        formatter.render_command.side_effect = lambda text: order.append(('notice', text))
         events = Mock()
         events.reply.emit.side_effect = lambda **kwargs: order.append(('reply', kwargs['reply']))
         refined = 'Joãozinho gostava de futebol.'
@@ -74,7 +74,7 @@ class DictationReplyTests(unittest.TestCase):
         player = Mock()
         clipboard = Mock()
         clipboard.copy.side_effect = lambda text: order.append(('clipboard', text))
-        scope = dict(__file__=str(path), Path=Path, recorder=recorder, text_formatter=formatter,
+        scope = dict(__file__=str(path), Path=Path, recorder=recorder, cli_output=formatter,
                      configs=NS(is_keep_context=False, agent='codex'), shared=Mock())
         exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), scope)
         modules = {

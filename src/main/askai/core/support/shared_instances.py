@@ -25,7 +25,7 @@ from askai.core.component.multimedia.recorder import recorder
 from askai.core.engine.ai_engine import AIEngine
 from askai.core.engine.engine_factory import EngineFactory
 from askai.core.support.chat_context import ChatContext, ContextEntry
-from askai.core.support.utilities import display_text
+from askai.cli import output as cli_output
 from clitt.core.term.terminal import terminal
 from askai.cli.prompt_input import line_input
 from hspylib.core.metaclass.singleton import Singleton
@@ -99,10 +99,6 @@ class SharedInstances(metaclass=Singleton):
 
     def mode_icon(self) -> str:
         return self._mode.icon
-
-    @property
-    def nickname(self) -> str:
-        return f"%GREEN%{self.mode.icon}  Taius:%NC% "
 
     @property
     def username(self) -> str:
@@ -232,7 +228,7 @@ class SharedInstances(metaclass=Singleton):
             if (ret := line_input(input_prompt, placeholder, allow_voice=allow_voice)) == Keyboard.VK_CTRL_L:  # Use voice input.
                 terminal.cursor.erase_line()
                 if spoken_text := self.listen():
-                    display_text(f"{self.username}: {spoken_text}")
+                    cli_output.render_text(spoken_text, f" {prompt.user.title()}", style="white")
                 ret = spoken_text
             elif ret == Keyboard.VK_CTRL_D:
                 return ""

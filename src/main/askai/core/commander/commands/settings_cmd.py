@@ -16,8 +16,7 @@
 from abc import ABC
 from askai.core.askai_configs import configs
 from askai.core.askai_settings import settings
-from askai.core.support.text_formatter import text_formatter
-from askai.core.support.utilities import display_text
+from askai.cli import output as cli_output
 from hspylib.core.tools.commons import sysout
 from setman.settings.settings_entry import SettingsEntry
 from typing import Any, Optional
@@ -33,7 +32,7 @@ class SettingsCmd(ABC):
             sysout(all_settings + "\n")
         else:
             sysout(f"\n%RED%-=- No settings found! -=-%NC%\n")
-        display_text(f"> Hint: Type: '/settings set \\<number|settings_name\\> \\<value\\>' to set.")
+        cli_output.render_message(f"> Hint: Type: '/settings set \\<number|settings_name\\> \\<value\\>' to set.")
 
     @staticmethod
     def set(name: str, value: Any, *, announce: bool = True) -> None:
@@ -53,9 +52,9 @@ class SettingsCmd(ABC):
                 set_muted(muted)
                 set_sfx_muted(muted)
             if announce:
-                text_formatter.commander_print(f"Setting `{name}` changed to %GREEN%{value}%NC%")
+                cli_output.render_command(f"Setting `{name}` changed to {value}")
         else:
-            text_formatter.commander_print(f"%RED%Setting: '{name}' was not found!%NC%")
+            cli_output.render_command(f"Setting: '{name}' was not found!")
 
     @staticmethod
     def get(key: str) -> Optional[SettingsEntry]:
@@ -64,9 +63,9 @@ class SettingsCmd(ABC):
         :return: The corresponding SettingsEntry if found, otherwise None.
         """
         if ss := settings[key]:
-            text_formatter.commander_print(f"%WHITE%Name: %BLUE%{ss.name}\t%WHITE%Value: %GREEN%{ss.value}%NC%")
+            cli_output.render_command(f"Name: {ss.name}\tValue: {ss.value}")
             return ss
-        text_formatter.commander_print(f"%RED%Setting: '{key}' was not found!%NC%")
+        cli_output.render_command(f"Setting: '{key}' was not found!")
         return None
 
     @staticmethod
@@ -86,4 +85,4 @@ class SettingsCmd(ABC):
         settings.put("askai.sfx.muted", is_sfx_muted)
         settings.put("askai.debug.enabled", is_debug)
         settings.put("askai.cache.enabled", is_cache)
-        text_formatter.commander_print(f"%GREEN%Factory settings reset!%NC%")
+        cli_output.render_command(f"Factory settings reset!")

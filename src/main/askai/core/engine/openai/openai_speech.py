@@ -83,11 +83,11 @@ class OpenAISpeech:
                 try:
                     if stream:
                         from askai.cli.speech_renderer import stream_answer
-                        from askai.core.support.text_formatter import text_formatter
+                        from askai.cli import output as cli_output
                         synchronized_speech(
                             speech_file_path, self._configs.tempo, Event(),
                             lambda timing, cancelled: stream_answer(
-                                text_formatter.console, text, prefix, timing, cancelled),
+                                cli_output.console, text, prefix, timing, cancelled),
                         )
                     else:
                         player.play_audio_file(speech_file_path, self._configs.tempo)

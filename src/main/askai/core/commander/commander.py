@@ -39,8 +39,7 @@ from askai.core.commander.commands.tts_stt_cmd import TtsSttCmd
 from askai.core.component.rag_provider import RAG_EXT_DIR, RAGProvider
 from askai.core.enums.router_mode import RouterMode
 from askai.core.support.shared_instances import shared
-from askai.core.support.text_formatter import text_formatter
-from askai.core.support.utilities import display_text
+from askai.cli import output as cli_output
 from askai.language.language import AnyLocale, Language
 
 # fmt: off
@@ -109,14 +108,9 @@ def _format_help(command: Command) -> str:
         return command.get_help(context)
 
 
-def color_bool(condition: bool, true_text: str = "ON", false_text: str = "OFF") -> str:
-    """Returns a formatted string with a colored toggle symbol based on the boolean condition.
-    :param condition: Boolean value determining the toggle state.
-    :param true_text: Text to display when condition is True.
-    :param false_text: Text to display when condition is False.
-    :return: A string representing the colored toggle state.
-    """
-    return ("%GREEN%  " + true_text if condition else "%RED%  " + false_text) + "%NC%"
+def _format_toggle(condition: bool, true_text: str = "ON", false_text: str = "OFF") -> str:
+    """Render a toggle using the shared Markdown theme and a state icon."""
+    return " **" + true_text + "**" if condition else " **" + false_text + "**"
 
 
 def _init_context(context_size: int = 1000, engine_name: str = "openai", model_name: str = "gpt-4o-mini") -> None:
@@ -133,11 +127,11 @@ def _init_context(context_size: int = 1000, engine_name: str = "openai", model_n
         """
         if message := ev.args.message:
             if error:
-                text_formatter.commander_print(f"%RED%{message}!%NC%")
+                cli_output.render_command(f"{message}!")
             else:
                 if ev.args.erase_last:
                     cursor.erase_line()
-                display_text(message)
+                cli_output.render_message(message)
 
     if shared.engine is None and shared.context is None:
         shared.create_engine(engine_name=engine_name, model_name=model_name, mode=RouterMode.default())
@@ -162,7 +156,7 @@ def help(command: str) -> None:
     help message.
     :param command: The command to retrieve help for (optional).
     """
-    render_help(text_formatter.console, commander_help(command.replace("/", "")), overview=not command)
+    render_help(cli_output.console, commander_help(command.replace("/", "")), overview=not command)
 
 
 @ask_commander.command()
@@ -194,11 +188,11 @@ def _runtime_selection(kind, operation, name):
             result = runtime.set_engine(name) if kind == 'engine' else runtime.set_model(name)
         else:
             result = runtime.engines() if kind == 'engine' else runtime.models()
-        text_formatter.commander_print(f"Engine: `{result['engine']}` · Model: `{result['model']}`")
+        cli_output.render_command(f"Engine: `{result['engine']}` · Model: `{result['model']}`")
         for item in result.get('engines', []):
-            text_formatter.commander_print(item)
+            cli_output.render_command(item)
         for item in result.get('models', []):
-            text_formatter.commander_print(f"`{item['id']}` — {item['name']}")
+            cli_output.render_command(f"`{item['id']}` — {item['name']}")
         return result
     except Exception as error:
         raise click.ClickException(str(error)) from error
@@ -217,13 +211,13 @@ def session(operation: str) -> None:
 
     if operation == "compact":
         changed = taius.compact_session()
-        text_formatter.commander_print(msg.t(
+        cli_output.render_command(msg.t(
             "Session compacted. History and STM were preserved." if changed
             else "No new session activity to compact."
         ))
         return
     taius.reset_session()
-    text_formatter.commander_print(msg.t(
+    cli_output.render_command(msg.t(
         "Session reset. Your next request will start a new session with the AskAI tool prompt. History and STM were preserved."
     ))
 
@@ -232,28 +226,28 @@ def session(operation: str) -> None:
 def assistive() -> None:
     """Toggle assistive mode ON/OFF."""
     SettingsCmd.set("askai.router.assistive.enabled", not configs.is_assistive, announce=False)
-    text_formatter.commander_print(f"`Assistive responses` is {color_bool(configs.is_assistive)}")
+    cli_output.render_command(f"`Assistive responses` is {_format_toggle(configs.is_assistive)}")
 
 
 @ask_commander.command()
 def debug() -> None:
     """Toggle debug mode ON/OFF."""
     SettingsCmd.set("askai.debug.enabled", not configs.is_debug, announce=False)
-    text_formatter.commander_print(f"`Debugging` is {color_bool(configs.is_debug)}")
+    cli_output.render_command(f"`Debugging` is {_format_toggle(configs.is_debug)}")
 
 
 @ask_commander.command()
 def speak() -> None:
     """Toggle speak mode ON/OFF."""
     SettingsCmd.set("askai.speak.enabled", not configs.is_speak, announce=False)
-    text_formatter.commander_print(f"`Speech-To-Text` is {color_bool(configs.is_speak)}")
+    cli_output.render_command(f"`Speech-To-Text` is {_format_toggle(configs.is_speak)}")
 
 
 @ask_commander.command()
 def mute() -> None:
     """Toggle sound-effect muting and remember the preference. Speech uses /speak."""
     SettingsCmd.set("askai.sfx.muted", not configs.is_sfx_muted, announce=False)
-    text_formatter.commander_print(f"`SFX mute` is {color_bool(configs.is_sfx_muted)}")
+    cli_output.render_command(f"`SFX mute` is {_format_toggle(configs.is_sfx_muted)}")
 
 
 @ask_commander.command()
@@ -271,7 +265,7 @@ def context(operation: str, name: str | None = None) -> None:
             HistoryCmd.context_forget(name)
         case _:
             err = str(click.BadParameter(f"Invalid settings operation: '{operation}'"))
-            text_formatter.commander_print(f"Error: {err}")
+            cli_output.render_command(f"Error: {err}")
 
 
 @ask_commander.command()
@@ -327,10 +321,10 @@ def paste(delay: float) -> None:
 
     try:
         if not pyperclip.paste():
-            text_formatter.commander_print('The clipboard is empty.')
+            cli_output.render_command('The clipboard is empty.')
             return
-        text_formatter.commander_print(f'Pasting in {delay:g} seconds. Focus the destination app.')
-        text_formatter.console.file.flush()
+        cli_output.render_command(f'Pasting in {delay:g} seconds. Focus the destination app.')
+        cli_output.console.file.flush()
         sleep(delay)
         paste_into_focused_app()
     except (OSError, RuntimeError) as error:
@@ -352,7 +346,7 @@ def devices(operation: str, name: str | None = None) -> None:
             TtsSttCmd.device_set(name)
         case _:
             err = str(click.BadParameter(f"Invalid settings operation: '{operation}'"))
-            text_formatter.commander_print(f"Error: {err}")
+            cli_output.render_command(f"Error: {err}")
 
 
 @ask_commander.command()
@@ -376,7 +370,7 @@ def settings(operation: str, name: str, value: str) -> None:
             SettingsCmd.reset()
         case _:
             err = str(click.BadParameter(f"Invalid settings operation: '{operation}'"))
-            text_formatter.commander_print(f"Error: {err}")
+            cli_output.render_command(f"Error: {err}")
 
 
 @ask_commander.command()
@@ -414,13 +408,13 @@ def cache(operation: str, args: tuple[str, ...]) -> None:
         case "get":
             if not args:
                 err: str = str(click.MissingParameter(f"Argument 'name' is required. Usage /cache get \\<name\\>"))
-                text_formatter.commander_print(f"Error: {err}")
+                cli_output.render_command(f"Error: {err}")
             else:
                 set(map(sysout, map(CacheCmd.get, args)))
         case "clear":
             if args and (invalid := next((a for a in args if not isinstance(a, str | int)), None)):
                 err: str = str(click.BadParameter(f"Invalid argument: '{invalid}'"))
-                text_formatter.commander_print(f"Error: {err}")
+                cli_output.render_command(f"Error: {err}")
             elif args:
                 set(map(CacheCmd.clear, args))
             else:
@@ -430,21 +424,21 @@ def cache(operation: str, args: tuple[str, ...]) -> None:
         case "enable":
             if not args:
                 err: str = str(click.MissingParameter(f"Arguments missing. Usage /cache enable \\<0|1\\>"))
-                text_formatter.commander_print(f"Error: {err}")
+                cli_output.render_command(f"Error: {err}")
             else:
                 SettingsCmd.set("askai.cache.enabled", to_bool(args[0]), announce=False)
-                text_formatter.commander_print(f"Caching has been *{'en' if configs.is_cache else 'dis'}abled* !")
+                cli_output.render_command(f"Caching has been *{'en' if configs.is_cache else 'dis'}abled* !")
         case "ttl":
             if not args:
-                text_formatter.commander_print(f"Cache TTL is set to *{configs.ttl} minutes* !")
+                cli_output.render_command(f"Cache TTL is set to *{configs.ttl} minutes* !")
             elif not args[0].isdigit():
                 err: str = str(click.MissingParameter(f"Argument 'minutes' is invalid. Usage /cache ttl \\<minutes\\>"))
-                text_formatter.commander_print(f"Error: {err}")
+                cli_output.render_command(f"Error: {err}")
             else:
                 configs.ttl = int(args[0])
-                text_formatter.commander_print(f"Cache TTL was set to *{args[0]} minutes* !")
+                cli_output.render_command(f"Cache TTL was set to *{args[0]} minutes* !")
         case _:
-            text_formatter.commander_print(f"`Caching` is {color_bool(configs.is_cache)}")
+            cli_output.render_command(f"`Caching` is {_format_toggle(configs.is_cache)}")
 
 
 @ask_commander.command()
@@ -478,7 +472,7 @@ def playback() -> None:
 
     storage = Path(os.getenv('ASKAI_CAPABILITY_DIR', str(askai_data_dir() / 'cache' / 'capabilities')))
     try:
-        show_player(MediaPlayer(storage), text_formatter.console, read_playback_key, msg.t)
+        show_player(MediaPlayer(storage), cli_output.console, read_playback_key, msg.t)
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
         raise click.ClickException(str(error)) from error
 
@@ -518,7 +512,7 @@ def voices(operation: str, name: tuple[str, ...]) -> dict:
                 return TtsSttCmd.voice_play(voice_name)
             case _:
                 err = str(click.BadParameter(f"Invalid voices operation: '{operation}'"))
-                text_formatter.commander_print(f"%RED%{err}%NC%")
+                cli_output.render_command(f"{err}")
                 return {'status': 'failed', 'error': err}
     except (RuntimeError, ValueError) as error:
         raise click.ClickException(str(error)) from error
@@ -586,7 +580,7 @@ def info() -> None:
     if os.getenv("ASKAI_APP"):
         GeneralCmd.app_info()
     else:
-        text_formatter.commander_print("No information available (offline)!")
+        cli_output.render_command("No information available (offline)!")
 
 
 @ask_commander.command()
@@ -626,7 +620,7 @@ def camera(operation: str, args: list) -> None:
             CameraCmd.review()
         case _:
             err = str(click.BadParameter(f"Invalid camera operation: '{operation}'"))
-            text_formatter.commander_print(f"%RED%{err}%NC%")
+            cli_output.render_command(f"{err}")
 
 
 @ask_commander.command()
@@ -636,7 +630,7 @@ def mode(router_mode: str) -> None:
     :param router_mode: The routing mode. Options: [rag|chat|taius]
     """
     if not router_mode:
-        text_formatter.commander_print(f"Available routing modes: **[rag|chat|taius]**. Current: `{shared.mode}`")
+        cli_output.render_command(f"Available routing modes: **[rag|chat|taius]**. Current: `{shared.mode}`")
     else:
         match router_mode.casefold():
             case "rag":
@@ -661,16 +655,16 @@ def rag(operation: str, args: tuple[str, ...]) -> None:
         case "add":
             if not args:
                 err: str = str(click.MissingParameter(f"Arguments missing. Usage /rag add \\<folder|file\\>"))
-                text_formatter.commander_print(f"Error: {err}")
+                cli_output.render_command(f"Error: {err}")
             else:
                 res: Path = Path(args[0])
                 if not res.exists():
-                    text_formatter.commander_print(f"Error: Could not find folder: '{res}'")
+                    cli_output.render_command(f"Error: Could not find folder: '{res}'")
                 else:
                     if RAGProvider.copy_rag(res):
-                        text_formatter.commander_print(f"RAG folder '{res}' has been *added* to rag directory !")
+                        cli_output.render_command(f"RAG folder '{res}' has been *added* to rag directory !")
                     else:
-                        text_formatter.commander_print(f"Error: Failed to add RAG folder: '{res}' !")
+                        cli_output.render_command(f"Error: Failed to add RAG folder: '{res}' !")
         case "list":
             sysout(f"> Listing ARG entries from: `{RAG_EXT_DIR}`", markdown=True)
             results = list()
@@ -684,24 +678,24 @@ def rag(operation: str, args: tuple[str, ...]) -> None:
         case "del":
             if not args:
                 err: str = str(click.MissingParameter(f"Arguments missing. Usage /rag del \\<folder|file\\>"))
-                text_formatter.commander_print(f"Error: {err}")
+                cli_output.render_command(f"Error: {err}")
             else:
                 res: Path = Path(args[0])
                 if RAGProvider.del_rag(res):
-                    text_formatter.commander_print(f"RAG resource '{res}' has been *deleted* from rag directory !")
+                    cli_output.render_command(f"RAG resource '{res}' has been *deleted* from rag directory !")
                 else:
-                    text_formatter.commander_print(f"Error: Failed to delete RAG folder: '{res}' !")
+                    cli_output.render_command(f"Error: Failed to delete RAG folder: '{res}' !")
         case "clear":
             if RAGProvider.clear():
-                text_formatter.commander_print(f"ALL RAG resources been *deleted* from rag directory !")
+                cli_output.render_command(f"ALL RAG resources been *deleted* from rag directory !")
             else:
-                text_formatter.commander_print(f"Error: Failed to wipe the RAG folder!")
+                cli_output.render_command(f"Error: Failed to wipe the RAG folder!")
         case "enable":
             if not args:
                 err: str = str(click.MissingParameter(f"Arguments missing. Usage /rag enable \\<0|1\\>"))
-                text_formatter.commander_print(f"Error: {err}")
+                cli_output.render_command(f"Error: {err}")
             else:
                 SettingsCmd.set("askai.rag.enabled", to_bool(args[0]), announce=False)
-                text_formatter.commander_print(f"RAG has been *{'en' if configs.is_rag else 'dis'}abled* !")
+                cli_output.render_command(f"RAG has been *{'en' if configs.is_rag else 'dis'}abled* !")
         case _:
-            text_formatter.commander_print(f"`RAG` is {color_bool(configs.is_rag)}")
+            cli_output.render_command(f"`RAG` is {_format_toggle(configs.is_rag)}")

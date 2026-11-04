@@ -17,8 +17,7 @@ from askai.core.askai_messages import AskAiMessages
 from askai.core.askai_settings import settings
 from askai.core.component.summarizer import summarizer
 from askai.core.support.shared_instances import shared
-from askai.core.support.text_formatter import text_formatter
-from askai.core.support.utilities import display_text
+from askai.cli import output as cli_output
 from askai.language.language import Language
 from clitt.core.term.terminal import Terminal
 from hspylib.core.config.path_object import PathObject
@@ -34,7 +33,7 @@ class GeneralCmd(ABC):
     @staticmethod
     def app_info() -> None:
         """Display some useful application information."""
-        display_text(shared.app_info, markdown=False)
+        cli_output.render_text(shared.app_info)
 
     @staticmethod
     def execute(cmd_line: str | None = None) -> None:
@@ -43,9 +42,9 @@ class GeneralCmd(ABC):
         """
         output, err_out, exit_code = Terminal.INSTANCE.shell_exec(cmd_line, shell=True)
         if exit_code == ExitStatus.SUCCESS:
-            text_formatter.commander_print(output)
+            cli_output.render_command(output)
         else:
-            display_text(f"\n%RED%Command `{cmd_line}` failed. Error({err_out})  Code ({exit_code})%NC%")
+            cli_output.render_message(f"\nCommand `{cmd_line}` failed. Error({err_out})  Code ({exit_code})")
 
     @staticmethod
     def summarize(folder: str, glob: str) -> None:
@@ -56,11 +55,11 @@ class GeneralCmd(ABC):
         sum_dir: PathObject | None = PathObject.of(folder)
         if sum_dir and os.path.exists(sum_dir.abs_dir):
             if summarizer.generate(sum_dir.abs_dir, glob):
-                text_formatter.commander_print(f"Summarization complete. Folder: *{folder}*  Glob: *{glob}* !")
+                cli_output.render_command(f"Summarization complete. Folder: *{folder}*  Glob: *{glob}* !")
             else:
-                display_text(f"\n%RED%-=- Failed to summarize. Folder: {folder}  Glob: {glob} ! -=-%NC%")
+                cli_output.render_message(f"\n-=- Failed to summarize. Folder: {folder}  Glob: {glob} ! -=-")
         else:
-            display_text(f"\n%RED%-=- Folder '{folder}' does not exist! -=-%NC%")
+            cli_output.render_message(f"\n-=- Folder '{folder}' does not exist! -=-")
 
     @staticmethod
     def idiom(locale_str: str) -> None:
@@ -71,14 +70,14 @@ class GeneralCmd(ABC):
             if locale_str and (language := Language.of_locale(locale_str)):
                 locale.setlocale(locale.LC_ALL, (language.idiom, language.encoding.val))
                 settings.put("askai.preferred.language", language.idiom)
-                text_formatter.commander_print(f"Locale changed to: {language}")
+                cli_output.render_command(f"Locale changed to: {language}")
             else:
                 current_locale = locale.getlocale(locale.LC_ALL)
                 loc_str = f"{current_locale[0]}.{current_locale[1]}" if all(current_locale) else ""
                 language = Language.of_locale(loc_str)
-                text_formatter.commander_print(f"Current locale: {language}")
+                cli_output.render_command(f"Current locale: {language}")
         except (ValueError, TypeError) as err:
-            display_text(f"\n%RED%-=- Failed to set idiom: '{str(err)}'! -=-%NC%")
+            cli_output.render_message(f"\n-=- Failed to set idiom: '{str(err)}'! -=-")
 
     @staticmethod
     def translate(from_lang: Language, *texts: str) -> None:
@@ -87,4 +86,4 @@ class GeneralCmd(ABC):
         :param texts: The texts to be translated.
         """
         translator = AskAiMessages.get_translator(from_lang)
-        list(map(display_text, map(translator.translate, texts)))
+        list(map(cli_output.render_message, map(translator.translate, texts)))

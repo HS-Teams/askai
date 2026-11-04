@@ -26,7 +26,7 @@ from askai.core.component.scheduler import scheduler
 from askai.core.enums.router_mode import RouterMode
 from askai.core.model.ai_reply import AIReply
 from askai.core.support.shared_instances import shared
-from askai.core.support.utilities import display_text
+from askai.cli import output as cli_output
 from askai.tui.app_icons import AppIcons
 from clitt.core.term.cursor import cursor
 from clitt.core.term.screen import screen
@@ -72,20 +72,20 @@ class AskAiCli(AskAi):
         from askai.cli.agent_interaction import AgentInteraction
         from askai.cli.agent_progress import AgentProgress
         from askai.cli.confirmation import Confirmation, show_confirmation, read_confirmation_key
-        from askai.core.support.text_formatter import text_formatter as tf
+        from askai.cli import output as cli_output
 
         interact = AgentInteraction(
             lambda placeholder: shared.input_text(shared.username, placeholder),
-            lambda text: display_text(text, shared.nickname, markdown=False),
+            lambda text: cli_output.render_message(text, f"{self.mode.icon} Taius"),
             translate=msg.translate,
             confirm=Confirmation(
                 read_confirmation_key,
-                lambda message, grants=(): show_confirmation(tf.console, message, msg.translate, grants),
+                lambda message, grants=(): show_confirmation(cli_output.console, message, msg.translate, grants),
                 translate=msg.translate,
-                echo=lambda text: display_text(text, markdown=False),
+                echo=lambda text: cli_output.render_text(text),
             ),
         )
-        self._agent_progress = AgentProgress(tf.console, interact)
+        self._agent_progress = AgentProgress(cli_output.console, interact)
         taius.interact = self._agent_progress.interact
         taius.emit = self._agent_event
         self._startup()
@@ -113,7 +113,7 @@ class AskAiCli(AskAi):
                 break
         if question == "":
             self._reply(AIReply.info(msg.goodbye()))
-        display_text("", markdown=False)
+        cli_output.console.print()
 
     def _reply(self, reply: AIReply) -> None:
         """Reply to the user with the AI-generated response.
@@ -123,23 +123,27 @@ class AskAiCli(AskAi):
             return
         from askai.cli.answer_renderer import render_answer
         from askai.cli.speech_renderer import stream_answer
-        from askai.core.support.text_formatter import text_formatter
+        from askai.cli import output as cli_output
 
         text = reply.message if reply.is_final else msg.translate(reply.message)
-        from askai.core.speech.narration import parse_narration
+        from askai.core.speech.narration import Narration, parse_narration
         from askai.core.speech.presentation import format_narration
-        narration = parse_narration(text) if reply.is_final else None
+        narration = None
+        if reply.is_final:
+            narration = parse_narration(text)
+        elif reply.is_speakable:
+            narration = Narration('', text, '')
         spoken = narration.spoken if narration else text
         text = format_narration(narration) if narration else text
         label = f"{self.mode.icon} Taius"
-        render = lambda: render_answer(text_formatter.console, text, label) if reply.is_final else display_text(text, shared.nickname)
+        render = lambda: render_answer(cli_output.console, text, label)
         if configs.is_speak and reply.is_speakable and spoken:
             def failed(error):
                 render()
                 events.reply.emit(reply=AIReply.error(str(error)))
             shared.speech.speak(
                 spoken, failed,
-                present=lambda duration, cancelled: stream_answer(text_formatter.console, text, label, duration, cancelled, narration),
+                present=lambda duration, cancelled: stream_answer(cli_output.console, text, label, duration, cancelled, narration),
                 wait=True,
             )
         else:
@@ -150,12 +154,14 @@ class AskAiCli(AskAi):
         :param reply: The error reply message to be displayed to the user.
         """
         if reply and (text := msg.translate(reply.message)):
+            from askai.cli.answer_renderer import render_answer
+            from askai.core.speech.presentation import NARRATION_PREFIX
+            from askai.cli import output as cli_output
+
             log.error(reply.message if configs.is_keep_context else "AskAI request failed (history disabled)")
+            render_answer(cli_output.console, f"{NARRATION_PREFIX}Error: {text}", f"{self.mode.icon} Taius")
             if configs.is_speak and reply.is_speakable:
-                display_text(f"Error: {text}", f"{shared.nickname}")
                 shared.speech.speak(f"Error: {text}", lambda error: events.reply.emit(reply=AIReply.error(str(error))))
-            else:
-                display_text(f"%RED%Error: {text}%NC%", f"{shared.nickname}")
 
     def _input(self) -> Optional[str]:
         """Read the user input from stdin.
@@ -172,10 +178,10 @@ class AskAiCli(AskAi):
         if event.kind != "initial_commentary":
             return
         from askai.cli.answer_renderer import render_answer
-        from askai.core.support.text_formatter import text_formatter
+        from askai.cli import output as cli_output
 
         text = event.data["text"]
-        self._agent_progress.present(lambda: render_answer(text_formatter.console, text, f"{self.mode.icon} Taius"))
+        self._agent_progress.present(lambda: render_answer(cli_output.console, text, f"{self.mode.icon} Taius"))
         if configs.is_speak:
             shared.speech.speak(text, lambda error: log.warning("Initial commentary TTS failed: %s", error), wait=False, immediate=True)
 
@@ -187,7 +193,7 @@ class AskAiCli(AskAi):
             f"TTS switched from {ev.args.provider} to Ollama. Reason: {ev.args.reason}. "
             "The configured default was not changed."
         )
-        display_text(message, "%YELLOW%⚠ " + msg.t("Warning") + " · TTS: %NC%", markdown=False)
+        cli_output.render_text(message, "⚠ " + msg.t("Warning") + " · TTS", style="yellow")
 
     def _cb_voice_input(self, ev: Event) -> None:
         from askai.cli.prompt_input import request_voice
@@ -212,11 +218,11 @@ class AskAiCli(AskAi):
         if reply := ev.args.reply:
             if reply.is_system:
                 from rich.text import Text
-                from askai.core.support.text_formatter import text_formatter
+                from askai.cli import output as cli_output
                 from askai.cli.prompt_input import present_notice
                 notice = Text("  " + msg.t("System") + ": ", style="bold yellow")
                 notice.append(msg.translate(reply.message).strip(), style="default")
-                present_notice(text_formatter.console, notice)
+                present_notice(cli_output.console, notice)
                 return
             if reply.is_error:
                 self._reply_error(reply)
@@ -243,10 +249,10 @@ class AskAiCli(AskAi):
         :param ev: The event object representing the microphone listening event.
         """
         from askai.cli.listening_indicator import ListeningIndicator
-        from askai.core.support.text_formatter import text_formatter
+        from askai.cli import output as cli_output
 
         if self._listening_indicator is None:
-            self._listening_indicator = ListeningIndicator(text_formatter.console, msg.translate)
+            self._listening_indicator = ListeningIndicator(cli_output.console, msg.translate)
         self._listening_indicator.update(ev.args.listening, ev.args.text)
 
     def _cb_device_changed_event(self, ev: Event) -> None:
@@ -254,12 +260,12 @@ class AskAiCli(AskAi):
         :param ev: The event object representing the device change.
         """
         from rich.text import Text
-        from askai.core.support.text_formatter import text_formatter
+        from askai.cli import output as cli_output
         from askai.cli.prompt_input import present_notice
 
         notice = Text("  " + msg.t("System") + ": ", style="bold yellow")
         notice.append(msg.translate(msg.device_switch(str(ev.args.device))).strip(), style="default")
-        present_notice(text_formatter.console, notice)
+        present_notice(cli_output.console, notice)
 
     def _splash(self) -> None:
         """Display the splash before the startup loader takes over the terminal."""
@@ -269,8 +275,8 @@ class AskAiCli(AskAi):
     def _startup(self) -> None:
         """Initialize the application components."""
         from askai.cli.startup_progress import startup_progress
-        from askai.core.support.text_formatter import text_formatter
-        progress: Progress = startup_progress(text_formatter.console)
+        from askai.cli import output as cli_output
+        progress: Progress = startup_progress(cli_output.console)
         # List of tasks for progress tracking
         tasks = [
             "Downloading nltk data",
@@ -319,7 +325,7 @@ class AskAiCli(AskAi):
             askai_bus.subscribe(MIC_LISTENING_EVENT, self._cb_mic_listening_event)
             askai_bus.subscribe(DEVICE_CHANGED_EVENT, self._cb_device_changed_event)
             askai_bus.subscribe(MODE_CHANGED_EVENT, self._cb_mode_changed_event)
-            display_text(str(self), markdown=False)
+            cli_output.render_text(str(self))
             while not self._startup_notices.empty():
                 self._display_reply_event(self._startup_notices.get())
             pending = getattr(self, "_pending_tts_fallback", None)

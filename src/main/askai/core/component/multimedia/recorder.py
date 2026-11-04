@@ -18,7 +18,8 @@ from askai.core.askai_messages import msg
 from askai.core.component.cache_service import REC_DIR
 from askai.core.component.scheduler import scheduler
 from askai.core.model.ai_reply import AIReply
-from askai.core.support.utilities import display_text, seconds
+from askai.cli import output as cli_output
+from askai.core.support.utilities import seconds
 from askai.exception.exceptions import InvalidInputDevice, InvalidRecognitionApiError
 from askai.language.language import Language
 from hspylib.core.enums.enumeration import Enumeration
@@ -305,7 +306,7 @@ class Recorder(metaclass=Singleton):
                         break
             if not device:
                 if not (device := next(devices.__iter__(), None)):
-                    display_text(f"%HOM%%ED2%Error: Unable to setup an Audio Input device!%NC%")
+                    cli_output.render_message("Error: Unable to setup an Audio Input device!")
                     sys.exit(ExitStatus.FAILED.val)
             if device and not self.set_device(device):
                 devices.remove(device)

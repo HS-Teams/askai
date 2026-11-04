@@ -14,8 +14,8 @@
 """
 from abc import ABC
 from askai.core.support.shared_instances import shared
-from askai.core.support.text_formatter import text_formatter
-from askai.core.support.utilities import display_text
+from askai.core.support.markdown_text import strip_format
+from askai.cli import output as cli_output
 from clitt.core.tui.line_input.keyboard_input import KeyboardInput
 from textwrap import indent
 from typing import Optional
@@ -34,16 +34,16 @@ class HistoryCmd(ABC):
 
         if (all_context := shared.context) and (length := len(all_context)) > 0:
             ln: str = os.linesep
-            display_text(f"### Listing ALL ({length}) Chat Contexts:\n\n---\n\n")
+            cli_output.render_message(f"### Listing ALL ({length}) Chat Contexts:\n\n---\n\n")
             for c in all_context:
                 ctx, ctx_val = c[0], c[1]
-                display_text(
+                cli_output.render_message(
                     f"- {ctx} ({len(ctx_val)}/{all_context.max_context_size} "
                     f"tk [{all_context.length(ctx)}/{all_context.token_limit}]) \n"
                     + indent(
                         ln.join(
                             [
-                                f'{i}. **{e.role.title()}:**\n\n{indent(text_formatter.strip_format(e.content), " " * 4)}'
+                                f'{i}. **{e.role.title()}:**\n\n{indent(strip_format(e.content), " " * 4)}'
                                 + os.linesep
                                 for i, e in enumerate(ctx_val, start=1)
                             ]
@@ -52,9 +52,9 @@ class HistoryCmd(ABC):
                     ),
                     markdown=False,
                 )
-            display_text(f"> Hint: Type: '/context forget [context] to forget a it.")
+            cli_output.render_message(f"> Hint: Type: '/context forget [context] to forget a it.")
         else:
-            text_formatter.commander_print(f"%YELLOW% Context is empty %NC%")
+            cli_output.render_command(f" Context is empty ")
 
     @staticmethod
     def context_forget(context: str | None = None) -> None:
@@ -66,8 +66,8 @@ class HistoryCmd(ABC):
         else:
             shared.context.forget()  # Clear the context
             shared.memory.clear()  # Also clear the chat memory
-        text_formatter.commander_print(
-            f"Context %GREEN%'{context.upper() if context else 'ALL'}'%NC% has been cleared!"
+        cli_output.render_command(
+            f"Context '{context.upper() if context else 'ALL'}' has been cleared!"
         )
 
     @staticmethod
@@ -83,11 +83,11 @@ class HistoryCmd(ABC):
                 )
             ):
                 pyperclip.copy(copied_text)
-                text_formatter.commander_print(f"`{name}` copied to the clipboard!")
+                cli_output.render_command(f"`{name}` copied to the clipboard!")
             else:
-                text_formatter.commander_print(f"There is nothing to copy from `{name}`!")
+                cli_output.render_command(f"There is nothing to copy from `{name}`!")
         else:
-            text_formatter.commander_print(f"Context name not found: `{name}`!")
+            cli_output.render_command(f"Context name not found: `{name}`!")
 
         return copied_text
 
@@ -103,22 +103,22 @@ class HistoryCmd(ABC):
         history = PersistentMemory(Path(ASKAI_DIR) / "memory" / "history.sqlite3")
         entries = history.conversations(configs.agent, str(Path.cwd().resolve()), day)
         if not entries:
-            text_formatter.commander_print(msg.t("No conversation history found."))
+            cli_output.render_command(msg.t("No conversation history found."))
             return
         groups = {}
         for entry in entries:
             groups.setdefault((entry["day"], entry["session"]), []).append(entry)
         for (session_day, session_id), turns in groups.items():
             unknown = msg.t("Not recorded")
-            display_text(f"### {session_day or unknown} — {msg.t('Session')}: `{session_id or unknown}`")
+            cli_output.render_message(f"### {session_day or unknown} — {msg.t('Session')}: `{session_id or unknown}`")
             for turn in turns:
-                display_text(f"**{msg.t('Question')}** ({turn['created']})\n\n{turn['question']}")
+                cli_output.render_message(f"**{msg.t('Question')}** ({turn['created']})\n\n{turn['question']}")
                 if turn["answer"] is not None:
-                    display_text(f"**{msg.t('Answer')}**\n\n{turn['answer']}")
+                    cli_output.render_message(f"**{msg.t('Answer')}**\n\n{turn['answer']}")
                 elif turn["error"] is not None:
-                    display_text(f"**{msg.t('Failed')}**\n\n{turn['error']}")
+                    cli_output.render_message(f"**{msg.t('Failed')}**\n\n{turn['error']}")
                 else:
-                    display_text(msg.t("Incomplete request: no final answer recorded."))
+                    cli_output.render_message(msg.t("Incomplete request: no final answer recorded."))
 
     @staticmethod
     def history_forget() -> None:

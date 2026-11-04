@@ -6,8 +6,8 @@ from rich.text import Text
 def read_confirmation_key(allowed='12ysn'):
     from hspylib.modules.cli.keyboard import Keyboard
     from askai.core.askai_prompt import prompt
-    from askai.core.support.text_formatter import text_formatter
-    text_formatter.console.print(Text(f'  {prompt.user.title()}: '), end='')
+    from askai.cli import output as cli_output
+    cli_output.console.print(Text(f'  {prompt.user.title()}: '), end='')
     while True:
         key = Keyboard.wait_keystroke()
         value = key.val.casefold() if key is not None else None

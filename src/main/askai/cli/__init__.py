@@ -66,6 +66,7 @@ __all__ = [
     'help_formatter',
     'interaction_text',
     'listening_indicator',
+    'output',
     'playback',
     'prompt_input',
     'speech_renderer',

@@ -17,7 +17,7 @@ class CommandHelpTests(unittest.TestCase):
         result = {'engine': 'codex', 'model': 'model-b', 'changed': True}
         runtime.set_model.return_value = result
         runtime.engines.return_value = {'engine': 'codex', 'model': 'model-a', 'engines': ['codex', 'openai']}
-        self.scope['text_formatter'] = Mock()
+        self.scope['cli_output'] = Mock()
         with patch('askai.core.engine.runtime.runtime_engines', return_value=runtime):
             response = CliRunner().invoke(self.group, ['model', 'set', 'model-b'], standalone_mode=False)
             self.assertEqual(response.exit_code, 0, response.output)
@@ -40,7 +40,7 @@ class CommandHelpTests(unittest.TestCase):
             ):
                 nodes.append(node)
         self.scope = dict(click=click, Template=Template, dedent=dedent, HelpGroup=HelpGroup, GesturesCommand=GesturesCommand,
-                          _init_context=Mock(), display_text=Mock())
+                          _init_context=Mock(), cli_output=Mock())
         module = ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[]))
         exec(compile(module, str(source), 'exec'), self.scope)
         self.group = self.scope['ask_commander']
@@ -96,7 +96,7 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn('copied to the clipboard', ' '.join(help_result.output.split()))
 
     def test_paste_waits_for_focus_change_and_supports_immediate_paste(self):
-        self.scope['text_formatter'] = Mock()
+        self.scope['cli_output'] = Mock()
         for arguments, seconds in ((['paste'], 3), (['paste', '--delay', '0'], 0)):
             with self.subTest(arguments=arguments), patch('pyperclip.paste', return_value='refined text'), patch(
                     'time.sleep') as sleep, patch('askai.core.support.clipboard.paste_into_focused_app') as paste:
@@ -111,19 +111,19 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn('without pressing Enter', ' '.join(help_result.output.split()))
 
     def test_empty_clipboard_and_invalid_delay_do_not_paste(self):
-        self.scope['text_formatter'] = Mock()
+        self.scope['cli_output'] = Mock()
         with patch('pyperclip.paste', return_value=''), patch('time.sleep') as sleep, patch(
                 'askai.core.support.clipboard.paste_into_focused_app') as paste:
             result = CliRunner().invoke(self.group, ['paste'])
             self.assertEqual(result.exit_code, 0, result.output)
-            self.scope['text_formatter'].commander_print.assert_called_once_with('The clipboard is empty.')
+            self.scope['cli_output'].render_command.assert_called_once_with('The clipboard is empty.')
             for delay in ('-1', 'not-a-number'):
                 self.assertNotEqual(CliRunner().invoke(self.group, ['paste', '--delay', delay]).exit_code, 0)
             sleep.assert_not_called()
             paste.assert_not_called()
 
     def test_paste_reports_native_permission_failure(self):
-        self.scope['text_formatter'] = Mock()
+        self.scope['cli_output'] = Mock()
         with patch('pyperclip.paste', return_value='text'), patch('time.sleep'), patch(
                 'askai.core.support.clipboard.paste_into_focused_app', side_effect=RuntimeError('Enable Accessibility')):
             result = CliRunner().invoke(self.group, ['paste', '--delay', '0'])
@@ -195,7 +195,7 @@ class CommandHelpTests(unittest.TestCase):
         with patch('askai.gestures.command.start') as start, patch('askai.gestures.background.stop') as stop:
             direct = CliRunner().invoke(self.group, ['gestures', '--help'], terminal_width=160)
             self.assertEqual(direct.exit_code, 0, direct.output)
-            self.scope['text_formatter'] = Mock()
+            self.scope['cli_output'] = Mock()
             self.scope['render_help'] = Mock()
             named = CliRunner().invoke(self.group, ['help', 'gestures'])
             self.assertEqual(named.exit_code, 0, named.output)

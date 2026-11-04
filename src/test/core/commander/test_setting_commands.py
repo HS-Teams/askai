@@ -23,7 +23,7 @@ class SettingCommandTests(unittest.TestCase):
         self.output = MagicMock()
         self.namespace = dict(
             ABC=object, Any=object, Optional=__import__('typing').Optional,
-            SettingsEntry=object, settings=self.store, text_formatter=self.output,
+            SettingsEntry=object, settings=self.store, cli_output=self.output,
         )
         self.setter = load_definition(
             'core/commander/commands/settings_cmd.py', 'SettingsCmd', self.namespace
@@ -39,7 +39,7 @@ class SettingCommandTests(unittest.TestCase):
                 with self.subTest(command=command, enabled=enabled):
                     self.store.reset_mock()
                     namespace = dict(SettingsCmd=self.setter, configs=SimpleNamespace(**{prop: enabled}),
-                                     text_formatter=self.output, color_bool=str)
+                                     cli_output=self.output, _format_toggle=str)
                     callback = load_definition('core/commander/commander.py', command, namespace)
                     callback()
                     self.store.put.assert_called_once_with(key, not enabled)
@@ -51,7 +51,7 @@ class SettingCommandTests(unittest.TestCase):
                 with self.subTest(command=command, value=value):
                     self.store.reset_mock()
                     namespace = dict(SettingsCmd=self.setter, configs=SimpleNamespace(**{prop: value == '1'}),
-                                     text_formatter=self.output, to_bool=lambda value: value == '1')
+                                     cli_output=self.output, to_bool=lambda value: value == '1')
                     callback = load_definition('core/commander/commander.py', command, namespace)
                     callback('enable', (value,))
                     self.store.put.assert_called_once_with(key, value == '1')
@@ -69,7 +69,7 @@ class SettingCommandTests(unittest.TestCase):
                 self.store.get_bool.return_value = not muted
                 config = SimpleNamespace(is_sfx_muted=muted, is_speak=True)
                 callback = load_definition('core/commander/commander.py', 'mute', dict(
-                    SettingsCmd=self.setter, configs=config, text_formatter=self.output, color_bool=str))
+                    SettingsCmd=self.setter, configs=config, cli_output=self.output, _format_toggle=str))
                 callback()
                 self.store.put.assert_called_once_with('askai.sfx.muted', not muted)
                 local.assert_called_once_with(not muted)
@@ -96,10 +96,10 @@ class SettingCommandTests(unittest.TestCase):
 
     def test_setting_confirmation_remains_default_but_can_be_suppressed(self):
         self.setter.set('askai.speak.enabled', True)
-        self.output.commander_print.assert_called_once()
+        self.output.render_command.assert_called_once()
         self.output.reset_mock()
         self.setter.set('askai.speak.enabled', False, announce=False)
-        self.output.commander_print.assert_not_called()
+        self.output.render_command.assert_not_called()
 
     def test_cli_and_tui_preserve_saved_flags_and_allow_explicit_enable(self):
         tree = ast.parse((ROOT / '__main__.py').read_text())

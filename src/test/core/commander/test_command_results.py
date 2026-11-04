@@ -19,9 +19,10 @@ class CommandResultTests(unittest.TestCase):
         self.group = click.Group()
         commander = ModuleType('askai.core.commander.commander')
         commander.ask_commander = self.group
-        formatter = ModuleType('askai.core.support.text_formatter')
-        formatter.text_formatter = SimpleNamespace(console=self.console)
-        self.modules = patch.dict('sys.modules', {commander.__name__: commander, formatter.__name__: formatter})
+        console = patch('askai.cli.output.console', self.console)
+        console.start()
+        self.addCleanup(console.stop)
+        self.modules = patch.dict('sys.modules', {commander.__name__: commander})
         self.modules.start()
         self.addCleanup(self.modules.stop)
         results.communication.clear()
@@ -145,7 +146,7 @@ class StructuredVoiceTests(unittest.TestCase):
         self.speech.model_name, self.speech.voice = 'eleven_v4', 'Voice 0'
         self.speech.voices.return_value = [f'Voice {index}' for index in range(15)]
         self.speech.select_voice.side_effect = lambda voice: setattr(self.speech, 'voice', voice)
-        self.scope = {'shared': SimpleNamespace(speech=SimpleNamespace(tts=self.speech)), 'text_formatter': Mock()}
+        self.scope = {'shared': SimpleNamespace(speech=SimpleNamespace(tts=self.speech)), 'cli_output': Mock()}
         module = ast.fix_missing_locations(ast.Module(body=[cls], type_ignores=[]))
         exec(compile(module, str(source), 'exec'), self.scope)
         self.commands = self.scope['TtsSttCmd']

@@ -15,8 +15,7 @@
 from abc import ABC
 from askai.core.askai_configs import configs
 from askai.core.component.cache_service import cache, CACHE_DIR
-from askai.core.support.text_formatter import text_formatter
-from askai.core.support.utilities import display_text
+from askai.cli import output as cli_output
 from functools import partial
 from hspylib.core.tools.commons import human_readable_bytes, sysout
 from hspylib.core.tools.text_tools import elide_text
@@ -35,7 +34,7 @@ class CacheCmd(ABC):
         if not configs.is_cache:
             sysout(f"\n%ORANGE%-=- Cache is disabled! -=-%NC%\n")
         elif (all_keys := sorted(cache.keys)) and (length := len(all_keys)) > 0:
-            display_text(f"### Listing ALL ({length}) Cached Questions:\n\n---\n\n")
+            cli_output.render_message(f"### Listing ALL ({length}) Cached Questions:\n\n---\n\n")
             entries: str = ""
             for i, query in enumerate(all_keys, start=1):
                 answer: str | None = cache.read_reply(query)
@@ -43,10 +42,10 @@ class CacheCmd(ABC):
                     continue
                 cache_str: str = elide_text(answer, 80).replace(os.linesep, "␊")
                 entries += f"{i}. **{query}**: `{cache_str}` \n"
-            display_text(entries)
+            cli_output.render_message(entries)
         else:
             sysout(f"\n%RED%-=- Caching is empty! -=-%NC%")
-        display_text("\n> Hint: Type: '/cache [get|clear|files|enable|ttl] <args>'.")
+        cli_output.render_message("\n> Hint: Type: '/cache [get|clear|files|enable|ttl] <args>'.")
 
     @staticmethod
     def get(name: str) -> Optional[str]:
@@ -76,7 +75,7 @@ class CacheCmd(ABC):
                     deleted = cache.del_reply(name)
         else:
             deleted = str(cache.clear_replies())
-        text_formatter.commander_print(f"*{deleted if deleted else 'No'}* cache(s) has been cleared!")
+        cli_output.render_command(f"*{deleted if deleted else 'No'}* cache(s) has been cleared!")
 
     @staticmethod
     def files(cleanup: bool = False, *args: str | int) -> None:
@@ -92,12 +91,12 @@ class CacheCmd(ABC):
                         f_join = partial(os.path.join, f"{CACHE_DIR}/{arg}")
                         if os.path.isdir(cached):
                             set(map(os.remove, map(f_join, os.listdir(cached))))
-                            text_formatter.commander_print(f"Folder *{cached}* has been cleared!")
+                            cli_output.render_command(f"Folder *{cached}* has been cleared!")
                         elif os.path.isfile(cached):
                             os.remove(cached)
-                            text_formatter.commander_print(f"File **{cached}** was removed!")
+                            cli_output.render_command(f"File **{cached}** was removed!")
             else:
-                display_text(f"### Listing cached files from '{CACHE_DIR}':\n\n---\n\n")
+                cli_output.render_message(f"### Listing cached files from '{CACHE_DIR}':\n\n---\n\n")
                 files, dirs = "", ""
                 for cached in os.listdir(CACHE_DIR):
                     f_cached = os.path.join(CACHE_DIR, cached)
@@ -109,7 +108,7 @@ class CacheCmd(ABC):
                     else:
                         size, unit = human_readable_bytes(os.path.getsize(f_cached))
                         files += f"- **{cached}** ({size} {unit})\n"
-                display_text(f"{dirs}\n{files}")
-                display_text(f"\n> Hint: Type: '/cache files cleanup [globs ...]' to delete cached files.")
+                cli_output.render_message(f"{dirs}\n{files}")
+                cli_output.render_message(f"\n> Hint: Type: '/cache files cleanup [globs ...]' to delete cached files.")
         else:
             sysout(f"\n%RED%-=- Cache dir {CACHE_DIR} does not exist! -=-%NC%\n")

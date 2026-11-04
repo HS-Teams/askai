@@ -58,10 +58,10 @@ def command_diagnostics(command=''):
 
 def execute_command(arguments, *, raise_errors=False):
     from askai.core.commander.commander import ask_commander
-    from askai.core.support.text_formatter import text_formatter
+    from askai.cli import output as cli_output
 
     result = {'command': arguments[0], 'arguments': arguments[1:], 'status': 'completed'}
-    console = text_formatter.console
+    console = cli_output.console
     failure = None
     with _console_lock:
         original = console.file

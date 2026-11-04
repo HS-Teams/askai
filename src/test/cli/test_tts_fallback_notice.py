@@ -24,7 +24,7 @@ class FallbackNoticeTests(unittest.TestCase):
                 translator = Mock(return_value=translated)
                 display = Mock()
                 view = Mock()
-                handler = self.handler(filename, {'msg': SimpleNamespace(t=translator), 'display_text': display})
+                handler = self.handler(filename, {'msg': SimpleNamespace(t=translator), 'cli_output': SimpleNamespace(render_text=display)})
                 event = SimpleNamespace(args=SimpleNamespace(provider='ElevenLabs', reason='HTTP 402'))
                 handler(view, event)
                 translator.assert_any_call(
@@ -32,8 +32,9 @@ class FallbackNoticeTests(unittest.TestCase):
                     'The configured default was not changed.')
                 if filename.startswith('core'):
                     self.assertEqual(translated, display.call_args.args[0])
-                    self.assertTrue(display.call_args.args[1].startswith('%YELLOW%⚠ '))
-                    self.assertTrue(display.call_args.args[1].endswith(' · TTS: %NC%'))
+                    self.assertTrue(display.call_args.args[1].startswith('⚠ '))
+                    self.assertTrue(display.call_args.args[1].endswith(' · TTS'))
+                    self.assertEqual(display.call_args.kwargs['style'], 'yellow')
                 else:
                     self.assertEqual(str(view.call_later.call_args.args[1]), translated)
                     self.assertIsInstance(view.call_later.call_args.args[1], str)
@@ -44,7 +45,7 @@ class FallbackNoticeTests(unittest.TestCase):
     def test_cli_defers_startup_notice_until_splash_is_finished(self):
         translator, display = Mock(return_value='translated reason'), Mock()
         handler = self.handler('core/askai_cli.py', {
-            'msg': SimpleNamespace(t=translator), 'display_text': display,
+            'msg': SimpleNamespace(t=translator), 'cli_output': SimpleNamespace(render_text=display),
         })
         view = SimpleNamespace(_ready=False)
         event = SimpleNamespace(args=SimpleNamespace(provider='ElevenLabs', reason='HTTP 402'))

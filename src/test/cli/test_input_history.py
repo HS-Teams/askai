@@ -19,7 +19,7 @@ class InputHistoryTests(unittest.TestCase):
             order.append(('execute', question))
             return True, None
         scope = dict(signal=Mock(), cache=cache, configs=SimpleNamespace(is_interactive=True),
-                     display_text=Mock(), AIReply=Mock(), msg=Mock())
+                     cli_output=Mock(), AIReply=Mock(), msg=Mock())
         exec(compile(ast.Module(body=[method], type_ignores=[]), str(source), 'exec'), scope)
         view = SimpleNamespace(_query_string=None, _input=Mock(side_effect=['/gestures', '/info', '']),
                                ask_and_reply=execute, abort=Mock(), _reply=Mock())

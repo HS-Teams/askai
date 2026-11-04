@@ -46,7 +46,6 @@ if TYPE_CHECKING:
     from .component.internet_service import CATEGORY_ICONS
     from .component.search_presentation import CATEGORY_ICONS
     from .enums.router_mode import CHAT
-    from .support.text_formatter import CHAT_ICONS
     from .commander.commander import COMMANDER_HELP_TPL
     from .agents.command_tool import COMMAND_TOOL
     from .component.cache_service import CacheService
@@ -118,11 +117,6 @@ if TYPE_CHECKING:
     from .component.rag_provider import RAGProvider
     from .speech.dictation import REFINEMENT_SCHEMA
     from .askai_configs import RESOURCE_DIR
-    from .support.text_formatter import RE_MD_CODE_BLOCK
-    from .support.text_formatter import RE_MD_ESCAPES
-    from .support.text_formatter import RE_TYPES
-    from .support.text_formatter import RE_URL
-    from .support.text_formatter import RICH_THEMES
     from .processors.rag import Rag
     from .agents.reasoning_summaries import ReasoningSummaries
     from .speech.recognizer_stt import RecognizerSTT
@@ -152,7 +146,6 @@ if TYPE_CHECKING:
     from .enums.acc_color import TERMINATE
     from .speech.contracts import TTSEngine
     from .processors.taius import TaiusProcessor
-    from .support.text_formatter import TextFormatter
     from .support.usage import Usage
     from .capabilities.desktop import VIDEO_SUFFIXES
     from .askai_events import VOICE_INPUT_EVENT
@@ -203,7 +196,6 @@ _EXPORTS = {
     'CATEGORY_ICONS': ('component.internet_service', 'CATEGORY_ICONS'),
     'CATEGORY_ICONS': ('component.search_presentation', 'CATEGORY_ICONS'),
     'CHAT': ('enums.router_mode', 'CHAT'),
-    'CHAT_ICONS': ('support.text_formatter', 'CHAT_ICONS'),
     'COMMANDER_HELP_TPL': ('commander.commander', 'COMMANDER_HELP_TPL'),
     'COMMAND_TOOL': ('agents.command_tool', 'COMMAND_TOOL'),
     'CacheService': ('component.cache_service', 'CacheService'),
@@ -275,11 +267,6 @@ _EXPORTS = {
     'RAGProvider': ('component.rag_provider', 'RAGProvider'),
     'REFINEMENT_SCHEMA': ('speech.dictation', 'REFINEMENT_SCHEMA'),
     'RESOURCE_DIR': ('askai_configs', 'RESOURCE_DIR'),
-    'RE_MD_CODE_BLOCK': ('support.text_formatter', 'RE_MD_CODE_BLOCK'),
-    'RE_MD_ESCAPES': ('support.text_formatter', 'RE_MD_ESCAPES'),
-    'RE_TYPES': ('support.text_formatter', 'RE_TYPES'),
-    'RE_URL': ('support.text_formatter', 'RE_URL'),
-    'RICH_THEMES': ('support.text_formatter', 'RICH_THEMES'),
     'Rag': ('processors.rag', 'Rag'),
     'ReasoningSummaries': ('agents.reasoning_summaries', 'ReasoningSummaries'),
     'RecognizerSTT': ('speech.recognizer_stt', 'RecognizerSTT'),
@@ -309,7 +296,6 @@ _EXPORTS = {
     'TERMINATE': ('enums.acc_color', 'TERMINATE'),
     'TTSEngine': ('speech.contracts', 'TTSEngine'),
     'TaiusProcessor': ('processors.taius', 'TaiusProcessor'),
-    'TextFormatter': ('support.text_formatter', 'TextFormatter'),
     'Usage': ('support.usage', 'Usage'),
     'VIDEO_SUFFIXES': ('capabilities.desktop', 'VIDEO_SUFFIXES'),
     'VOICE_INPUT_EVENT': ('askai_events', 'VOICE_INPUT_EVENT'),
@@ -370,7 +356,6 @@ __all__ = [
     'CATEGORY_ICONS',
     'CATEGORY_ICONS',
     'CHAT',
-    'CHAT_ICONS',
     'COMMANDER_HELP_TPL',
     'COMMAND_TOOL',
     'CacheService',
@@ -442,11 +427,6 @@ __all__ = [
     'RAGProvider',
     'REFINEMENT_SCHEMA',
     'RESOURCE_DIR',
-    'RE_MD_CODE_BLOCK',
-    'RE_MD_ESCAPES',
-    'RE_TYPES',
-    'RE_URL',
-    'RICH_THEMES',
     'Rag',
     'ReasoningSummaries',
     'RecognizerSTT',
@@ -476,7 +456,6 @@ __all__ = [
     'TERMINATE',
     'TTSEngine',
     'TaiusProcessor',
-    'TextFormatter',
     'Usage',
     'VIDEO_SUFFIXES',
     'VOICE_INPUT_EVENT',
