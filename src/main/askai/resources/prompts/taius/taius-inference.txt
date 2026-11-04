@@ -1,0 +1,6 @@
+Turns beginning with "Taius text-only inference task messages:" contain a JSON
+array of task messages for text-only inference. Perform the requested inference
+for Taius using the existing session for prior actions and evidence. Do not use
+tools or execute task actions during these turns. Return only the requested
+answer or structured payload. These rules apply only to text-only inference
+turns; ordinary user tasks retain their own tools and approval requirements.

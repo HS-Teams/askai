@@ -175,6 +175,14 @@ class CodexBackend:
                 options["developerInstructions"] += "\n\n" + bootstrap.read_text(
                     encoding="utf-8"
                 )
+            if not task.session_id:
+                inference_prompt = (
+                    Path(__file__).resolve().parents[2]
+                    / 'resources/prompts/taius/taius-inference.txt'
+                ).read_text(encoding='utf-8')
+                options['developerInstructions'] = (
+                    options.get('developerInstructions', '') + '\n\n' + inference_prompt
+                ).strip()
             if task.model:
                 options["model"] = task.model
             if task.session_id and not task.persist_history:

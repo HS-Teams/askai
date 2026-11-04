@@ -29,6 +29,26 @@ class CodexTests(unittest.TestCase):
                 self.assertIsNone(backend.context_usage())
                 self.assertIsNone(backend._context_session)
 
+    def test_inference_orientation_is_sent_only_when_session_is_created(self):
+        for read_only in (True, False):
+            for session in (None, 's'):
+                with self.subTest(read_only=read_only, session=session):
+                    transport = self.transport([])
+                    backend = CodexBackend(transport_factory=lambda _: transport)
+                    with patch.object(backend, '_consume', return_value=Mock()):
+                        backend.run(AgentTask('question', Path.cwd(), session_id=session,
+                                              read_only=read_only), Mock(), Mock(), Event())
+                    method = 'thread/resume' if session else 'thread/start'
+                    options = next(call.args[1] for call in transport.request.call_args_list
+                                   if call.args[0] == method)
+                    instructions = options.get('developerInstructions', '')
+                    self.assertEqual('Taius text-only inference task messages:' in instructions,
+                                     session is None)
+                    turn = next(call.args[1] for call in transport.request.call_args_list
+                                if call.args[0] == 'turn/start')
+                    self.assertEqual(turn['sandboxPolicy'], {'type': 'readOnly'})
+                    self.assertEqual(turn['approvalPolicy'], 'never' if read_only else 'on-request')
+
     def test_computer_tool_title_is_forwarded_as_progress(self):
         transport = self.transport([
             {'method': 'item/started', 'params': {'item': {'type': 'mcpToolCall',

@@ -53,8 +53,7 @@ class AgentEngine:
         self, messages: list[dict], temperature: float = 0.0, schema: dict | None = None
     ) -> str:
         instruction = (
-            "Perform this text-only inference task for Taius. Do not execute task actions. Use the existing session for prior actions and evidence. Do not use tools or execute actions. "
-            "Return only the requested answer or structured payload. The following JSON contains the task messages:\n"
+            "Taius text-only inference task messages:\n"
             + json.dumps(messages, ensure_ascii=False)
         )
 

@@ -70,6 +70,23 @@ class AgentEngineTests(unittest.TestCase):
             engine.complete([])
             self.assertIsNone(backend.run.call_args.args[0].session_id)
 
+    def test_review_turns_send_only_marker_and_current_messages(self):
+        with patch('askai.core.engine.agent.agent_engine.create_backend') as factory:
+            backend = factory.return_value
+            backend.run.return_value = AgentResult('s', 't', 'answer', 'completed')
+            engine = AgentEngine('codex')
+            engine.configs = Mock(return_value=Mock(is_keep_context=True))
+            with engine.use_session('s'):
+                for text in ('Validate previous answer', 'Refine previous answer'):
+                    messages = [{'role': 'user', 'content': text}]
+                    engine.complete(messages)
+                    task = backend.run.call_args.args[0]
+                    marker, payload = task.instruction.split('\n', 1)
+                    self.assertEqual(marker, 'Taius text-only inference task messages:')
+                    self.assertEqual(json.loads(payload), messages)
+                    self.assertNotIn('Do not execute task actions', task.instruction)
+                    self.assertTrue(task.read_only)
+
     def test_auxiliary_inference_is_ephemeral_and_bound_reviews_preserve_policy(self):
         with patch('askai.core.engine.agent.agent_engine.create_backend') as factory:
             backend = factory.return_value
