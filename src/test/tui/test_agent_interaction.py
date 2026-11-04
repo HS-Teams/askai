@@ -20,6 +20,39 @@ class DialogApp(App):
 
 
 class InteractionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_clarification_keeps_custom_answer_and_allows_cancel(self):
+        params = {'questions': [{'id': 'q', 'question': 'Where?', 'options': [
+            {'label': 'Downloads', 'description': 'Files'},
+            {'label': 'Documents', 'description': 'Documents'}]}]}
+        app = DialogApp('item/tool/requestUserInput', params)
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            await pilot.click('#answer-0')
+            await pilot.press('M', 'y', ' ', 'f', 'o', 'l', 'd', 'e', 'r')
+            await pilot.click('#send')
+            await pilot.pause()
+            self.assertEqual(app.result, {'answers': {'q': {'answers': ['My folder']}}})
+        app = DialogApp('item/tool/requestUserInput', params)
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press('escape')
+            await pilot.pause()
+            self.assertEqual(app.result, {'answers': {}})
+
+    async def test_clarification_selects_option(self):
+        app = DialogApp('item/tool/requestUserInput', {'questions': [{
+            'id': 'q', 'question': 'Where?', 'options': [
+                {'label': 'Downloads', 'description': 'Files'},
+                {'label': 'Documents', 'description': 'Documents'}]}]})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            from textual.widgets import RadioSet
+            app.screen.query_one('#choice-0', RadioSet).children[1].value = True
+            await pilot.pause()
+            await pilot.click('#send')
+            await pilot.pause()
+            self.assertEqual(app.result, {'answers': {'q': {'answers': ['Documents']}}})
+
     async def test_approval_from_worker_has_explicit_accept_and_deny(self):
         for button, decision in [("allow", "accept"), ("deny", "decline")]:
             app = DialogApp("item/commandExecution/requestApproval", {"command": "pwd"})

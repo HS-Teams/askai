@@ -14,6 +14,7 @@ from askai.core.agents.elicitation import (
 from askai.core.agents.contracts import AgentError
 from askai.cli.confirmation import Confirmation
 from askai.cli.interaction_text import translate_request
+from askai.core.agents.clarification import selected_answer
 
 
 def approval_message(params: dict, translate=lambda text: text) -> str:
@@ -63,23 +64,25 @@ class AgentInteraction:
         logging.debug(
             "Agent interaction method=%s item=%s", method, params.get("itemId")
         )
+        original_questions = params.get('questions', [])
         params = translate_request(params, self._translate)
         if method in {ELICITATION_METHOD, INPUT_FORM_METHOD}:
             return self._elicit(params, confirm=method == ELICITATION_METHOD)
         if method == "item/tool/requestUserInput":
             answers = {}
-            for question in params.get("questions", []):
+            for index, question in enumerate(params.get("questions", [])):
                 self._show(question["question"])
-                for option in question.get("options") or []:
-                    self._show(f"{option['label']}: {option.get('description', '')}")
+                for number, option in enumerate(question.get("options") or [], 1):
+                    self._show(f"({number}) {option['label']}: {option.get('description', '')}")
                 value = (
                     self._read_secret(self._translate("Protected answer: "))
                     if question.get("isSecret")
-                    else self._read(self._translate("Your answer"))
+                    else self._read(self._translate("Choose a number or write your answer (/cancel to cancel)"))
                 )
-                if not value:
+                if not value or not value.strip() or value.strip().casefold() in {'/cancel', '/cancelar'}:
                     return {"answers": {}}
-                answers[question["id"]] = {"answers": [value]}
+                answer = value if question.get('isSecret') else selected_answer(original_questions[index], value)
+                answers[question["id"]] = {"answers": [answer]}
             return {"answers": answers}
         if method == "item/permissions/requestApproval":
             self._show(

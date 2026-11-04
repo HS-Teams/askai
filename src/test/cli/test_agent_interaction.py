@@ -4,6 +4,22 @@ from askai.cli.agent_interaction import AgentInteraction
 
 
 class InteractionTests(unittest.TestCase):
+    def test_numbered_choice_returns_original_label_after_translation(self):
+        response = AgentInteraction(Mock(return_value='2'), Mock(), translate=lambda text: 'Translated ' + text)(
+            'item/tool/requestUserInput', {'questions': [{
+                'id': 'folder', 'question': 'Where?', 'options': [
+                    {'label': 'Downloads', 'description': 'Files'},
+                    {'label': 'Documents', 'description': 'Documents'}]}]})
+        self.assertEqual(response, {'answers': {'folder': {'answers': ['Documents']}}})
+
+    def test_custom_answer_and_cancel(self):
+        params = {'questions': [{'id': 'q', 'question': 'Where?', 'options': [
+            {'label': 'A'}, {'label': 'B'}]}]}
+        self.assertEqual(AgentInteraction(Mock(return_value='My folder'), Mock())(
+            'item/tool/requestUserInput', params), {'answers': {'q': {'answers': ['My folder']}}})
+        self.assertEqual(AgentInteraction(Mock(return_value='/cancel'), Mock())(
+            'item/tool/requestUserInput', params), {'answers': {}})
+
     def setUp(self):
         tty = patch("askai.cli.agent_interaction.sys.stdin.isatty", return_value=True)
         tty.start()

@@ -13,7 +13,7 @@ from askai.core.agents.elicitation import (
 from textual.app import ComposeResult
 from textual.screen import ModalScreen
 from textual.containers import VerticalScroll
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input, Static, RadioButton, RadioSet
 
 
 class AgentInteraction(ModalScreen[dict]):
@@ -22,6 +22,7 @@ class AgentInteraction(ModalScreen[dict]):
     def __init__(self, method: str, params: dict, translate=lambda text: text):
         super().__init__()
         self._translate = translate
+        self._questions = params.get('questions', [])
         self.method, self.params = method, translate_request(params, translate)
 
     def compose(self) -> ComposeResult:
@@ -64,14 +65,16 @@ class AgentInteraction(ModalScreen[dict]):
             elif self.method == "item/tool/requestUserInput":
                 for index, question in enumerate(self.params.get("questions", [])):
                     yield Static(question["question"], markup=False)
-                    for option in question.get("options") or []:
-                        yield Static(
-                            f"{option['label']}: {option.get('description', '')}",
-                            markup=False,
-                        )
+                    if question.get('options') and not question.get('isSecret'):
+                        from rich.text import Text
+                        with RadioSet(id=f'choice-{index}'):
+                            for option in question['options']:
+                                yield RadioButton(Text(f"{option['label']}: {option.get('description', '')}"))
                     yield Input(
-                        id=f"answer-{index}", password=question.get("isSecret", False)
+                        id=f"answer-{index}", password=question.get("isSecret", False),
+                        placeholder=self._translate('Or write your own answer'),
                     )
+                yield Static('', id='question-error', markup=False)
                 yield Button(
                     self._translate("Send answers"), id="send", variant="primary"
                 )
@@ -121,16 +124,18 @@ class AgentInteraction(ModalScreen[dict]):
         elif event.button.id == "allow":
             self.dismiss({"decision": "accept"})
         elif event.button.id == "send":
-            self.dismiss(
-                {
-                    "answers": {
-                        question["id"]: {
-                            "answers": [self.query_one(f"#answer-{i}", Input).value]
-                        }
-                        for i, question in enumerate(self.params.get("questions", []))
-                    }
-                }
-            )
+            answers = {}
+            for i, question in enumerate(self._questions):
+                value = self.query_one(f'#answer-{i}', Input).value
+                if question.get('options') and not question.get('isSecret') and not value.strip():
+                    selected = self.query_one(f'#choice-{i}', RadioSet).pressed_index
+                    if selected >= 0:
+                        value = question['options'][selected]['label']
+                if not value.strip():
+                    self.query_one('#question-error', Static).update(self._translate('Answer each question to continue.'))
+                    return
+                answers[question['id']] = {'answers': [value]}
+            self.dismiss({'answers': answers})
         else:
             self.action_deny()
 

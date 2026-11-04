@@ -3,6 +3,7 @@
 from contextlib import ExitStack
 from askai.core.agents.camera_tool import CAMERA_TOOL, capture_camera
 from askai.core.agents.command_tool import COMMAND_TOOL, askai_command
+from askai.core.agents.clarification import CLARIFICATION_TOOL, clarify
 from askai.core.agents.identification_tool import IDENTIFICATION_TOOL, identify_camera
 from askai.core.agents.enrollment_tool import ENROLLMENT_TOOL, register_identities
 from askai.core.agents.screenshot_tool import SCREENSHOT_TOOL, capture_screenshot
@@ -167,7 +168,7 @@ class CodexBackend:
                     "This storage rule concerns newly generated artifacts, not edits to existing user files."
                 )
             if not task.session_id and not task.read_only:
-                options["dynamicTools"] = [CAMERA_TOOL, SCREENSHOT_TOOL, IDENTIFICATION_TOOL, ENROLLMENT_TOOL, COMMAND_TOOL]
+                options["dynamicTools"] = [CAMERA_TOOL, SCREENSHOT_TOOL, IDENTIFICATION_TOOL, ENROLLMENT_TOOL, COMMAND_TOOL, CLARIFICATION_TOOL]
                 bootstrap = (
                     Path(__file__).resolve().parents[2]
                     / "resources/prompts/taius/taius-session-start.txt"
@@ -260,18 +261,26 @@ class CodexBackend:
             ):
                 continue
             if "id" in message and method == "item/tool/call":
-                handler = {"capture_camera": capture_camera, "capture_screenshot": capture_screenshot, "identify_camera": identify_camera, "register_identities": register_identities, "askai_command": askai_command}.get(params.get("tool"))
+                handler = {"capture_camera": capture_camera, "capture_screenshot": capture_screenshot, "identify_camera": identify_camera, "register_identities": register_identities, "askai_command": askai_command, "askai_clarify": clarify}.get(params.get("tool"))
                 if allow_tools and handler is not None and not cancelled.is_set():
+                    waiting_since = monotonic()
                     try:
                         response = handler(params, interact, emit, cancelled)
                     except Exception as error:
                         response = {"success": False, "contentItems": [{"type": "inputText", "text": str(error)}]}
+                    finally:
+                        if params.get('tool') == 'askai_clarify':
+                            deadline += monotonic() - waiting_since
                 else:
                     response = {"success": False, "contentItems": [{"type": "inputText", "text": "Tool unavailable in this turn"}]}
                 transport.send({"id": message["id"], "result": response})
                 continue
             if "id" in message and method:
-                self._respond(transport, message, interact, computer_consent)
+                waiting_since = monotonic()
+                try:
+                    self._respond(transport, message, interact, computer_consent)
+                finally:
+                    deadline += monotonic() - waiting_since
                 continue
             if method == "thread/tokenUsage/updated":
                 window = params.get("tokenUsage", {}).get("modelContextWindow")
