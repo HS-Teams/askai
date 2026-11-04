@@ -12,6 +12,7 @@ from askai.core.agents.model_context import codex_context_window, positive_integ
 from askai.core.agents.input_context import prepared_input
 from askai.core.agents.codex_connections import CodexConnections
 from askai.core.agents.elicitation import ELICITATION_METHOD, validate_reply
+from askai.core.support.performance import record_timing, timed
 import os
 from pathlib import Path
 from threading import Event
@@ -125,14 +126,13 @@ class CodexBackend:
             )
         if cancelled.is_set():
             raise AgentError("Delegation cancelled before starting Codex")
-        with self._connections.lease(task.read_only if task.persist_history else False, actions_allowed=not task.read_only) as transport, ExitStack() as stack:
+        with timed('codex.turn.review' if task.read_only else 'codex.turn.execution'), self._connections.lease(task.read_only) as transport, ExitStack() as stack:
             options = {
                 "cwd": str(task.cwd.resolve()),
                 "approvalPolicy": "never" if task.read_only else "on-request",
                 "sandbox": "read-only",
             }
             if not task.persist_history:
-                options["config"] = {"mcp_servers.askai_desktop.enabled": not task.read_only}
                 if not task.session_id:
                     options["ephemeral"] = True
             if not task.read_only:
@@ -194,7 +194,8 @@ class CodexBackend:
                 method = "thread/resume" if task.session_id else "thread/start"
                 if task.session_id:
                     options["threadId"] = task.session_id
-                started = transport.request(method, options)
+                with timed('codex.' + method):
+                    started = transport.request(method, options)
                 session = started["thread"]["id"]
                 self._active_model = started.get("model") or task.model
             if not task.read_only and session != self._context_session:
@@ -229,22 +230,27 @@ class CodexBackend:
             turn_options["effort"] = os.getenv("ASKAI_CODEX_REASONING_EFFORT", "low")
             if task.output_schema is not None:
                 turn_options["outputSchema"] = task.output_schema
-            turn = transport.request("turn/start", turn_options)["turn"]["id"]
-            emit(AgentEvent("started", session, turn))
-            result = self._consume(transport, session, turn, emit, interact, cancelled, allow_tools=not task.read_only)
+            with timed('codex.turn.response'):
+                started_at = monotonic()
+                turn = transport.request("turn/start", turn_options)["turn"]["id"]
+                emit(AgentEvent("started", session, turn))
+                result = self._consume(transport, session, turn, emit, interact, cancelled,
+                                       allow_tools=not task.read_only, started_at=started_at)
             return result
 
-    def _consume(self, transport, session, turn, emit, interact, cancelled, allow_tools=False):
+    def _consume(self, transport, session, turn, emit, interact, cancelled, allow_tools=False, started_at=None):
         deadline = monotonic() + self._timeout
         interrupted = False
         answers = {}
         commentary_sent = False
+        first_text_received = False
         computer_consent = {}
         from askai.core.agents.reasoning_summaries import ReasoningSummaries
         summaries = ReasoningSummaries()
         evidence = []
         while monotonic() < deadline:
             if cancelled.is_set() and not interrupted:
+                self._connections.revoke_actions()
                 transport.request(
                     "turn/interrupt", {"threadId": session, "turnId": turn}
                 )
@@ -253,6 +259,8 @@ class CodexBackend:
             message = transport.receive()
             if message is None:
                 continue
+            if cancelled.is_set():
+                self._connections.revoke_actions()
             method = message.get("method", "")
             params = message.get("params", {})
             if (
@@ -260,6 +268,12 @@ class CodexBackend:
                 or params.get("turnId", turn) not in (None, turn)
             ):
                 continue
+            if not first_text_received and started_at is not None:
+                item = params.get('item', {})
+                if ((method == 'item/agentMessage/delta' and params.get('delta')) or
+                        (method == 'item/completed' and item.get('type') == 'agentMessage' and item.get('text'))):
+                    record_timing('codex.turn.first_text', monotonic() - started_at)
+                    first_text_received = True
             if "id" in message and method == "item/tool/call":
                 handler = {"capture_camera": capture_camera, "capture_screenshot": capture_screenshot, "identify_camera": identify_camera, "register_identities": register_identities, "askai_command": askai_command, "askai_clarify": clarify}.get(params.get("tool"))
                 if allow_tools and handler is not None and not cancelled.is_set():
@@ -278,8 +292,12 @@ class CodexBackend:
             if "id" in message and method:
                 waiting_since = monotonic()
                 try:
-                    self._respond(transport, message, interact, computer_consent)
+                    with timed('codex.host_interaction'):
+                        self._respond(transport, message, interact, computer_consent,
+                                      read_only=not allow_tools, cancelled=cancelled)
                 finally:
+                    if cancelled.is_set():
+                        self._connections.revoke_actions()
                     deadline += monotonic() - waiting_since
                 continue
             if method == "thread/tokenUsage/updated":
@@ -355,7 +373,7 @@ class CodexBackend:
         )
 
     @staticmethod
-    def _respond(transport, request, interact, computer_consent=None):
+    def _respond(transport, request, interact, computer_consent=None, *, read_only=False, cancelled=None):
         method, params = request["method"], request.get("params", {})
         supported = {
             ELICITATION_METHOD,
@@ -373,11 +391,15 @@ class CodexBackend:
             )
             raise AgentError(f"Codex requested an unsupported interaction: {method}")
         response = None
-        if method == ELICITATION_METHOD:
+        if read_only or (cancelled is not None and cancelled.is_set()):
+            response = CodexBackend._denied_reply(method)
+        elif method == ELICITATION_METHOD:
             from askai.core.permissions.computer_use import computer_use_reply
             response = computer_use_reply(params, interact, computer_consent)
         if response is None:
             response = interact(method, params)
+        if cancelled is not None and cancelled.is_set():
+            response = CodexBackend._denied_reply(method)
         if not isinstance(response, dict):
             raise AgentError("Host interaction must return a structured response")
         if method == ELICITATION_METHOD:
@@ -399,3 +421,13 @@ class CodexBackend:
         elif not isinstance(response.get("answers"), dict):
             raise AgentError("Invalid user-input response")
         transport.send({"id": request["id"], "result": response})
+
+    @staticmethod
+    def _denied_reply(method):
+        if method == ELICITATION_METHOD:
+            return {"action": "decline"}
+        if method == 'item/permissions/requestApproval':
+            return {"permissions": {}}
+        if method == 'item/tool/requestUserInput':
+            return {"answers": {}}
+        return {"decision": "decline"}

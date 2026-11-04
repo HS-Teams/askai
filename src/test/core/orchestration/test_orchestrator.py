@@ -4,9 +4,26 @@ from unittest.mock import Mock
 from askai.core.agents.contracts import AgentError, AgentResult
 from askai.core.orchestration.orchestrator import Orchestrator
 from askai.core.support.short_term_memory import ShortTermMemory
+from askai.core.support.performance import timed
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_timings_correlate_parallel_connection_with_the_request(self):
+        def prepare():
+            with timed('codex.connection.reused'):
+                pass
+        self.service._prepare = prepare
+        with self.assertLogs(level='INFO') as logs:
+            self.run_request('private question')
+        measurements = [line for line in logs.output if 'AskAI timing' in line]
+        ids = {line.split('request=')[1].split()[0] for line in measurements}
+        self.assertEqual(len(ids), 1)
+        self.assertNotIn('-', ids)
+        for stage in ('codex.connection.reused', 'retrieval_and_connection', 'execution',
+                      'validation', 'refinement', 'request.total'):
+            self.assertTrue(any(f'timing {stage}:' in line for line in measurements), stage)
+        self.assertNotIn('private question', '\n'.join(measurements))
+
     def setUp(self):
         self.backend = Mock()
         self.backend.run.return_value = AgentResult(

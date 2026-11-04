@@ -8,6 +8,134 @@ from askai.core.agents.contracts import AgentTask, AgentError, AgentSessionNotFo
 
 
 class CodexTests(unittest.TestCase):
+    def test_session_created_for_review_can_later_execute_with_the_same_mcp(self):
+        transport = self.transport([])
+        backend = CodexBackend(transport_factory=lambda _: transport)
+        self.addCleanup(backend.close)
+        original_request = transport.request.side_effect
+        mcp_enabled = True
+        def request(method, params):
+            nonlocal mcp_enabled
+            # Native live resume does not reconfigure the loaded thread's MCP.
+            if method == 'thread/start':
+                mcp_enabled = params.get('config', {}).get('mcp_servers.askai_desktop.enabled', True)
+            return original_request(method, params)
+        transport.request.side_effect = request
+        def consume(*args, **kwargs):
+            self.assertTrue(mcp_enabled)
+            expected = 'allow' if kwargs['allow_tools'] else 'deny'
+            self.assertEqual(backend._connections._scope_file.read_text(), expected)
+            return Mock()
+        with patch.object(backend, '_consume', side_effect=consume):
+            backend.run(AgentTask('review', Path.cwd(), read_only=True), Mock(), Mock(), Event())
+            backend.run(AgentTask('execute', Path.cwd(), session_id='s'), Mock(), Mock(), Event())
+            backend.run(AgentTask('review again', Path.cwd(), session_id='s', read_only=True),
+                        Mock(), Mock(), Event())
+
+    def test_cancelled_execution_denies_pending_approvals_and_revokes_desktop_actions(self):
+        transport = self.transport([
+            {'id': 9, 'method': 'item/commandExecution/requestApproval', 'params': {}},
+            {'method': 'turn/completed', 'params': {'turn': {'id': 't', 'status': 'interrupted'}}},
+        ])
+        backend = CodexBackend(transport_factory=lambda _: transport)
+        self.addCleanup(backend.close)
+        cancelled, interact = Event(), Mock()
+        def emit(event):
+            if event.kind == 'started':
+                cancelled.set()
+        request = transport.request.side_effect
+        def check_interrupt(method, params):
+            if method == 'turn/interrupt':
+                self.assertEqual(backend._connections._scope_file.read_text(), 'deny')
+            return request(method, params)
+        transport.request.side_effect = check_interrupt
+        backend.run(AgentTask('execute', Path.cwd()), emit, interact, cancelled)
+        interact.assert_not_called()
+        transport.send.assert_called_with({'id': 9, 'result': {'decision': 'decline'}})
+
+    def test_approval_returning_after_cancel_is_discarded(self):
+        cases = [
+            ('item/commandExecution/requestApproval', {'decision': 'accept'}, {'decision': 'decline'}),
+            ('item/fileChange/requestApproval', {'decision': 'accept'}, {'decision': 'decline'}),
+            ('mcpServer/elicitation/request', {'action': 'accept', 'content': {}}, {'action': 'decline'}),
+            ('item/permissions/requestApproval', {'permissions': {'network': True}}, {'permissions': {}}),
+        ]
+        for method, accepted, denied in cases:
+            with self.subTest(method=method):
+                cancelled, transport = Event(), Mock()
+                def interact(*args):
+                    cancelled.set()
+                    return accepted
+                with patch('askai.core.permissions.computer_use.computer_use_reply', return_value=None):
+                    CodexBackend._respond(transport, {'id': 9, 'method': method, 'params': {}},
+                                          interact, cancelled=cancelled)
+                transport.send.assert_called_once_with({'id': 9, 'result': denied})
+
+    def test_execution_review_execution_reuses_server_and_reapplies_permissions(self):
+        transport = self.transport([])
+        factory = Mock(return_value=transport)
+        backend = CodexBackend(transport_factory=factory)
+        self.addCleanup(backend.close)
+        backend.prepare()
+        with patch.object(backend, '_consume', return_value=Mock()):
+            for read_only in (False, True, True, False):
+                backend.run(AgentTask('question', Path.cwd(), session_id='s', read_only=read_only),
+                            Mock(), Mock(), Event())
+        factory.assert_called_once()
+        transport.__exit__.assert_not_called()
+        turns = [call.args[1] for call in transport.request.call_args_list if call.args[0] == 'turn/start']
+        self.assertEqual([turn['approvalPolicy'] for turn in turns],
+                         ['on-request', 'never', 'never', 'on-request'])
+        self.assertTrue(all(turn['sandboxPolicy'] == {'type': 'readOnly'} for turn in turns))
+
+    def test_review_denies_host_approvals_and_dynamic_tools_without_prompting(self):
+        requests = [
+            ('item/commandExecution/requestApproval', {'decision': 'decline'}),
+            ('item/fileChange/requestApproval', {'decision': 'decline'}),
+            ('item/permissions/requestApproval', {'permissions': {}}),
+            ('mcpServer/elicitation/request', {'action': 'decline'}),
+            ('item/tool/requestUserInput', {'answers': {}}),
+        ]
+        notifications = [{'id': index, 'method': method, 'params': {}}
+                         for index, (method, _) in enumerate(requests)]
+        notifications += [
+            {'id': 10, 'method': 'item/tool/call', 'params': {'tool': 'capture_camera'}},
+            {'method': 'item/completed', 'params': {'item': {
+                'type': 'agentMessage', 'id': 'a', 'phase': 'final_answer', 'text': 'Reviewed'}}},
+            {'method': 'turn/completed', 'params': {'turn': {'id': 't', 'status': 'completed'}}},
+        ]
+        transport = self.transport(notifications)
+        backend = CodexBackend(transport_factory=lambda _: transport)
+        self.addCleanup(backend.close)
+        interact = Mock()
+        with patch('askai.core.agents.codex.capture_camera') as camera:
+            backend.run(AgentTask('review', Path.cwd(), session_id='s', read_only=True),
+                        Mock(), interact, Event())
+        interact.assert_not_called()
+        camera.assert_not_called()
+        replies = {call.args[0]['id']: call.args[0]['result'] for call in transport.send.call_args_list
+                   if 'id' in call.args[0]}
+        for index, (_, expected) in enumerate(requests):
+            self.assertEqual(replies[index], expected)
+        self.assertFalse(replies[10]['success'])
+
+    def test_first_text_timing_is_recorded_once_and_ignores_other_turns(self):
+        transport = self.transport([
+            {'method': 'item/agentMessage/delta', 'params': {'turnId': 'other', 'delta': 'ignore'}},
+            {'method': 'item/agentMessage/delta', 'params': {'delta': 'Hello'}},
+            {'method': 'item/agentMessage/delta', 'params': {'delta': ' again'}},
+            {'method': 'item/completed', 'params': {'item': {
+                'type': 'agentMessage', 'id': 'a', 'phase': 'final_answer', 'text': 'Hello again'}}},
+            {'method': 'turn/completed', 'params': {'turn': {'id': 't', 'status': 'completed'}}},
+        ])
+        backend = CodexBackend(transport_factory=lambda _: transport)
+        self.addCleanup(backend.close)
+        with patch('askai.core.agents.codex.record_timing') as timing:
+            backend.run(AgentTask('hello', Path.cwd()), Mock(), Mock(), Event())
+        timing.assert_called_once()
+        self.assertEqual(timing.call_args.args[0], 'codex.turn.first_text')
+        self.assertGreaterEqual(timing.call_args.args[1], 0)
+
     def test_missing_session_clears_stale_context_usage_before_recovery(self):
         for operation in ('compact', 'archive'):
             with self.subTest(operation=operation):

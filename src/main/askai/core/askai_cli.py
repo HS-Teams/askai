@@ -26,6 +26,7 @@ from askai.core.component.scheduler import scheduler
 from askai.core.enums.router_mode import RouterMode
 from askai.core.model.ai_reply import AIReply
 from askai.core.support.shared_instances import shared
+from askai.core.support.performance import timed
 from askai.cli import output as cli_output
 from askai.tui.app_icons import AppIcons
 from clitt.core.term.cursor import cursor
@@ -272,6 +273,7 @@ class AskAiCli(AskAi):
         screen.clear()
         console_out.print(indent(self.SPLASH, " " * 13))
 
+    @timed('startup.total')
     def _startup(self) -> None:
         """Initialize the application components."""
         from askai.cli.startup_progress import startup_progress
@@ -279,6 +281,7 @@ class AskAiCli(AskAi):
         progress: Progress = startup_progress(cli_output.console)
         # List of tasks for progress tracking
         tasks = [
+            "Connecting Codex",
             "Downloading nltk data",
             "Loading input history",
             "Starting scheduler",
@@ -304,6 +307,7 @@ class AskAiCli(AskAi):
                 cache.cache_enable = configs.is_cache
                 try:
                     results = run_startup_tasks({
+                        "Connecting Codex": shared.engine.backend.prepare,
                         "Downloading nltk data": lambda: nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR),
                         "Loading input history": lambda: cache.load_input_history(command_suggestions()),
                         "Checking speech engine": shared.speech.initialize_tts,
@@ -333,11 +337,13 @@ class AskAiCli(AskAi):
                 self._pending_tts_fallback = None
                 self._cb_tts_fallback(pending)
             self._reply(AIReply.info(self.mode.welcome()))
-        elif configs.is_speak:
-            shared.speech.initialize_tts()
-            nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR)
-            recorder.setup()
-            player.start_delay()
+        else:
+            shared.engine.backend.prepare()
+            if configs.is_speak:
+                shared.speech.initialize_tts()
+                nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR)
+                recorder.setup()
+                player.start_delay()
         # Register the startup
         with open(self.console_path, "a+", encoding=Charset.UTF_8.val) as f_console:
             f_console.write(f"\n\n## {AppIcons.STARTED} {now(TIME_FORMAT)}\n\n")

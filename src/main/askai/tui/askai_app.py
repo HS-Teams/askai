@@ -28,6 +28,7 @@ from askai.core.engine.ai_engine import AIEngine
 from askai.core.enums.router_mode import RouterMode
 from askai.core.model.ai_reply import AIReply
 from askai.core.support.shared_instances import shared
+from askai.core.support.performance import timed
 from askai.tui.app_header import Header
 from askai.tui.app_icons import AppIcons
 from askai.tui.app_suggester import InputSuggester
@@ -226,10 +227,20 @@ class AskAiApp(App[None]):
         """Toggles display of the table of contents."""
         self.md_console.show_table_of_contents = not self.md_console.show_table_of_contents
 
-    def check_action(self, action, parameters):
-        if action == 'cancel_capture':
-            return self._capture_listening
-        return super().check_action(action, parameters)
+    def check_action(self, action: str, _) -> Optional[bool]:
+        """Check if a specific action can be performed.
+        :param action: The name of the action to check.
+        :param _: Unused parameter, typically a placeholder for additional context.
+        :return: True if the action can be performed, None if it cannot.
+        """
+        if action == "forward" and self.md_console.navigator.end:
+            # Disable footer link if we can't go forward
+            return None
+        if action == "back" and self.md_console.navigator.start:
+            # Disable footer link if we can't go backward
+            return None
+        # All other keys display as normal
+        return True
 
     @work(thread=True)
     def enable_controls(self, enable: bool = True) -> None:
@@ -296,6 +307,11 @@ class AskAiApp(App[None]):
                         cache.save_input_history(suggestions)
         finally:
             self.enable_controls()
+
+    def check_action(self, action, parameters):
+        if action == 'cancel_capture':
+            return self._capture_listening
+        return super().check_action(action, parameters)
 
     def action_cancel_capture(self) -> None:
         self._capture_cancelled.set()
@@ -495,6 +511,7 @@ class AskAiApp(App[None]):
         finally:
             self.enable_controls()
 
+    @timed('startup.total')
     def _startup(self) -> None:
         """Initialize the application components."""
         os.chdir(Path.home())
@@ -505,6 +522,7 @@ class AskAiApp(App[None]):
         from askai.core.processors.rag import rag
 
         run_startup_tasks({
+            "codex": shared.engine.backend.prepare,
             "nltk": lambda: nltk.download("averaged_perceptron_tagger", quiet=True, download_dir=CACHE_DIR),
             "speech": shared.speech.initialize_tts,
             "rag": rag.prepare,

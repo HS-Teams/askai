@@ -280,12 +280,47 @@ side effects are not rolled back. No task is retried or switched to another agen
 silently.
 
 The adapter was exercised against Codex CLI 0.162.1. It uses structured final-answer
-items, not keyword filtering. Specialist sessions resume within the running AskAI
-process and directory; persistence of those session references across application
-restarts is pending. The old function-call executor and framework dependencies
+items, not keyword filtering. Specialist sessions are reused within the running
+AskAI process. With conversation history enabled, daily session references are
+persisted by agent and working directory and can resume after an application
+restart; see [Persistent memory](docs/PERSISTENT_MEMORY.md).
+The old function-call executor and framework dependencies
 have been removed. Existing document indexes are left intact; native retrieval
 uses a separate index namespace and rebuilds from source documents on first use.
 Audio caching and voice selection remain unchanged.
+
+### Clarification without restarting the task
+
+When an ambiguity or missing preference affects the result, Codex can call
+`askai_clarify` with one to three questions and optional choices. The CLI accepts
+a numbered choice or a written answer; the TUI provides selectable options and a
+free-text field. Users can cancel the question without supplying an answer.
+
+Execution pauses while the user answers, then continues in the same agent turn
+and session. Completed actions are not replayed, and the waiting period does not
+consume the host's turn timeout. Clarification answers do not grant permissions;
+action approvals retain their own checks. Restart AskAI to load this feature;
+existing Codex sessions need `/session reset` once to register the new tool.
+
+### Agent readiness between questions
+
+Session continuity and connection readiness are separate. Taius retains the agent
+session, but the current connection manager closes the app-server process when
+switching between execution and read-only review scopes. With persistent history,
+the next question therefore requires connection preparation and session resume.
+Each request also goes through validation and refinement. Document retrieval runs
+when RAG is enabled and documents are available; web searches are agent tool
+decisions, not a mandatory step for every question.
+
+Keeping the connection and loaded session ready between messages is a proposed
+optimization, not an implemented standby mode. It would reduce repeated local
+setup while preserving permission boundaries. Consulting sources only when
+needed is another possible improvement; it is not the current RAG policy.
+Each new answer still requires remote model processing, so readiness does not
+guarantee an immediate response or eliminate necessary searches. Latency gains
+have not been measured. See [Performance](docs/PERFORMANCE.md) for the current
+execution stages and timing logs, and the [Codex App Server documentation](https://learn.chatgpt.com/docs/app-server)
+for session and turn lifecycle.
 
 ### AskAI commands through conversation
 

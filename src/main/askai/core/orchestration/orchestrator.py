@@ -1,8 +1,9 @@
 """Coordinate AskAI capabilities without reproducing an agent's tool loop."""
 
 from contextlib import nullcontext
+from contextvars import copy_context
 from concurrent.futures import ThreadPoolExecutor
-from askai.core.support.performance import timed
+from askai.core.support.performance import request_timing, timed
 from datetime import date
 from pathlib import Path
 from threading import Event, Lock
@@ -87,7 +88,7 @@ class Orchestrator:
             self._active.release()
             emit(AgentEvent("finished", ""))
 
-    @timed("request.total")
+    @request_timing()
     def process(self, question: str, cwd: Path, context: str, emit, interact) -> str:
         if not self._active.acquire(blocking=False):
             raise AgentError(
@@ -196,7 +197,7 @@ class Orchestrator:
                 retrieved = self._retrieve(question)
             else:
                 with ThreadPoolExecutor(max_workers=1, thread_name_prefix="askai-connect") as pool:
-                    ready = pool.submit(self._prepare)
+                    ready = pool.submit(copy_context().run, self._prepare)
                     retrieved = self._retrieve(question)
                     ready.result()
         if retrieved:

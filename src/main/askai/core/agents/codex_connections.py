@@ -1,4 +1,4 @@
-"""Reuse app-server within a permission scope; release its writer on scope changes."""
+"""Reuse one app-server, granting desktop actions only during execution leases."""
 import atexit
 from contextlib import contextmanager
 from threading import RLock
@@ -7,55 +7,76 @@ from pathlib import Path
 
 from askai.core.agents.contracts import AgentError
 from askai.core.agents.desktop_tools import app_server_command
+from askai.core.support.performance import timed
 
 
 class CodexConnections:
     def __init__(self, executable, factory):
         self._executable, self._factory = executable, factory
-        self._connections = {}
+        self._connection = None
         self._lock = RLock()
         self._registered = False
         self._scope_directory = None
+        self._lease_scopes = []
 
-    def prepare(self, read_only=False):
-        with self._lock:
-            if read_only not in self._connections:
-                for scope in list(self._connections):
-                    self._discard(scope)
-                if self._scope_directory is None:
-                    self._scope_directory = TemporaryDirectory(prefix="askai-action-scope-")
-                self._set_action_scope(False)
-                manager = self._factory(app_server_command(self._executable, read_only, str(self._scope_file)))
-                transport = manager.__enter__()
+    def prepare(self):
+        with self._lock, timed('codex.connection.reused' if self._connection else 'codex.connection.cold'):
+            if self._connection is None:
+                if self._lease_scopes:
+                    raise AgentError('Codex connection was closed during an active lease')
+                self._scope_directory = TemporaryDirectory(prefix="askai-action-scope-")
                 try:
+                    self._set_action_scope(False)
+                    manager = self._factory(app_server_command(self._executable, False, str(self._scope_file)))
+                    self._connection = manager, None
+                    transport = manager.__enter__()
                     transport.request('initialize', {'clientInfo': {'name': 'askai', 'version': '1.0.0'}, 'capabilities': {'experimentalApi': True}})
                     transport.send({'method': 'initialized', 'params': {}})
                     account = transport.request('account/read', {}).get('account') or {}
                     if account.get('type') != 'chatgpt':
                         raise AgentError('Codex requires a ChatGPT login. Run `codex login` first (API keys are not used).')
                 except BaseException:
-                    manager.__exit__(None, None, None)
-                    self._scope_directory.cleanup()
-                    self._scope_directory = None
+                    self._discard()
                     raise
-                self._connections[read_only] = manager, transport
+                self._connection = manager, transport
                 if not self._registered:
                     atexit.register(self.close)
                     self._registered = True
-            return self._connections[read_only][1]
+            return self._connection[1]
 
     @contextmanager
     def lease(self, read_only, *, actions_allowed=None):
         with self._lock:
-            transport = self.prepare(read_only)
-            self._set_action_scope(not read_only and (True if actions_allowed is None else actions_allowed))
+            allowed = not read_only and (True if actions_allowed is None else actions_allowed)
+            if self._lease_scopes and allowed and not self._lease_scopes[-1]:
+                raise AgentError('Cannot enable actions inside a read-only Codex lease')
+            transport = self.prepare()
+            self._lease_scopes.append(allowed)
             try:
+                self._set_action_scope(allowed)
                 yield transport
             except BaseException:
-                self._discard(read_only)
+                self._discard()
                 raise
             finally:
-                self._set_action_scope(False)
+                self._lease_scopes.pop()
+                if self._connection is not None:
+                    try:
+                        self._set_action_scope(self._lease_scopes[-1] if self._lease_scopes else False)
+                    except BaseException:
+                        self._discard()
+                        raise
+
+    def revoke_actions(self):
+        """Cancellation cannot restore an enclosing execution's permissions."""
+        with self._lock:
+            self._lease_scopes[:] = [False] * len(self._lease_scopes)
+            if self._connection is not None:
+                try:
+                    self._set_action_scope(False)
+                except BaseException:
+                    self._discard()
+                    raise
 
     @property
     def _scope_file(self):
@@ -66,18 +87,22 @@ class CodexConnections:
         temporary.write_text("allow" if allowed else "deny")
         temporary.replace(self._scope_file)
 
-    def _discard(self, read_only):
-        connection = self._connections.pop(read_only, None)
-        if connection:
-            connection[0].__exit__(None, None, None)
+    def _discard(self):
+        connection, self._connection = self._connection, None
+        directory, self._scope_directory = self._scope_directory, None
+        try:
+            # Remove the grant before teardown, including if process shutdown fails.
+            if directory is not None:
+                directory.cleanup()
+        finally:
+            if connection:
+                connection[0].__exit__(None, None, None)
 
     def close(self):
         with self._lock:
-            for scope in list(self._connections):
-                self._discard(scope)
-            if self._registered:
-                atexit.unregister(self.close)
-                self._registered = False
-            if self._scope_directory is not None:
-                self._scope_directory.cleanup()
-                self._scope_directory = None
+            try:
+                self._discard()
+            finally:
+                if self._registered:
+                    atexit.unregister(self.close)
+                    self._registered = False
